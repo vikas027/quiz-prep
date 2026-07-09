@@ -1,8 +1,9 @@
 ---
-# Release — runs on push to main when code or dependency files change.
-# Creates or updates a release PR via release-please, auto-merges it, then builds
-# a multi-arch Docker image (amd64 + arm64), pushes to Docker Hub, and signs with cosign.
-# Does NOT trigger on: docs/*, *.md, .github/**, tests/**
+# Release — runs on push to main when source or workflow files change.
+# Flow:
+#   release-pr → docker-app-build (amd64 + arm64) → docker-app-merge
+#              → docker-mcp-build (amd64 + arm64) → docker-mcp-merge
+#              → release-publish (creates GitHub release after images are pushed)
 name: Release
 
 on:
@@ -10,11 +11,14 @@ on:
     branches: [main]
     paths:
       - "src/**"
+      - "mcp/**"
       - "pyproject.toml"
       - "Dockerfile"
-      - "tests/**"
       - "requirements.txt"
       - "requirements-dev.txt"
+      - ".github/workflows/release.yml"
+      - ".release-please-manifest.json"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -25,8 +29,10 @@ jobs:
   release-pr:
     runs-on: ubuntu-latest
     outputs:
-      should_publish: ${{ steps.versions.outputs.changed }}
-      version: ${{ steps.versions.outputs.version }}
+      should_publish_app: ${{ steps.versions.outputs.app_changed }}
+      should_publish_mcp: ${{ steps.versions.outputs.mcp_changed }}
+      app_version: ${{ steps.versions.outputs.app_version }}
+      mcp_version: ${{ steps.versions.outputs.mcp_version }}
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
@@ -50,23 +56,35 @@ jobs:
           PR_NUMBER=$(echo "$PRS_JSON" | jq -r '.[0].number')
           gh pr merge "$PR_NUMBER" --squash
 
-      - name: 🔖 Determine version
+      - name: 🔖 Determine which components need publishing
         id: versions
         run: |
           git fetch origin main --tags --force
           git checkout origin/main -- .release-please-manifest.json
-          VERSION=$(jq -r '."."' .release-please-manifest.json)
-          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+          APP_VERSION=$(jq -r '."."' .release-please-manifest.json)
+          MCP_VERSION=$(jq -r '."mcp"' .release-please-manifest.json)
+          if git rev-parse -q --verify "refs/tags/v${APP_VERSION}" >/dev/null; then
+            APP_CHANGED=false
           else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            APP_CHANGED=true
           fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/mcp-v${MCP_VERSION}" >/dev/null; then
+            MCP_CHANGED=false
+          else
+            MCP_CHANGED=true
+          fi
+          {
+            echo "app_version=${APP_VERSION}"
+            echo "mcp_version=${MCP_VERSION}"
+            echo "app_changed=${APP_CHANGED}"
+            echo "mcp_changed=${MCP_CHANGED}"
+          } >> "$GITHUB_OUTPUT"
 
-  docker-build:
+  docker-app-build:
     needs: release-pr
-    if: needs.release-pr.outputs.should_publish == 'true'
+    if: needs.release-pr.outputs.should_publish_app == 'true'
     strategy:
+      fail-fast: false
       matrix:
         include:
           - platform: linux/amd64
@@ -79,11 +97,18 @@ jobs:
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          ref: main
 
       - name: 🏷️ Set platform pair
         run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
         env:
           PLATFORM: ${{ matrix.platform }}
+
+      - name: 🔑 Check secrets
+        run: |
+          [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] || { echo "DOCKERHUB_USERNAME not set" >&2; exit 1; }
+          [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ] || { echo "DOCKERHUB_TOKEN not set" >&2; exit 1; }
 
       - name: 🐳 Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
@@ -94,39 +119,32 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 🏷️ Set push outputs
-        env:
-          IMG: ${{ env.IMAGE }}
-        run: |
-          OPTS="type=image,name=${IMG}"
-          OPTS="${OPTS},push-by-digest=true,name-canonical=true,push=true"
-          echo "PUSH_OUTPUTS=${OPTS}" >> "$GITHUB_ENV"
-
       - name: 🐳 Build and push by digest
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
         id: build
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          outputs: ${{ env.PUSH_OUTPUTS }}
-          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
-          cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=app-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=app-${{ env.PLATFORM_PAIR }}
 
       - name: 💾 Export digest
         run: |
-          mkdir -p /tmp/digests
+          mkdir -p "${{ runner.temp }}/digests"
           digest='${{ steps.build.outputs.digest }}'
-          touch "/tmp/digests/${digest#sha256:}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
       - name: 📤 Upload digest artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: digests-${{ env.PLATFORM_PAIR }}
-          path: /tmp/digests/*
+          name: digests-app-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
           retention-days: 1
 
-  docker-merge:
-    needs: [release-pr, docker-build]
+  docker-app-merge:
+    needs: [release-pr, docker-app-build]
     runs-on: ubuntu-latest
     env:
       IMAGE: vikas027/quiz-prep
@@ -134,8 +152,8 @@ jobs:
       - name: 📥 Download digest artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
-          path: /tmp/digests
-          pattern: digests-*
+          path: ${{ runner.temp }}/digests
+          pattern: digests-app-*
           merge-multiple: true
 
       - name: 🐳 Set up Docker Buildx
@@ -153,27 +171,149 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            type=raw,value=${{ needs.release-pr.outputs.version }}
-            type=raw,value=v${{ needs.release-pr.outputs.version }}
+            type=raw,value=${{ needs.release-pr.outputs.app_version }}
+            type=raw,value=v${{ needs.release-pr.outputs.app_version }}
             type=raw,value=latest
 
       - name: 🐳 Create and push multi-arch manifest
-        working-directory: /tmp/digests
-        env:
-          IMAGE: ${{ env.IMAGE }}
+        working-directory: ${{ runner.temp }}/digests
         run: |
-          mapfile -t TAGS < <(
-            jq -r '.tags[] | "-t " + .' <<< "$DOCKER_METADATA_OUTPUT_JSON"
-          )
-          mapfile -t DIGESTS < <(printf '%s\n' "${IMAGE}@sha256:"*)
-          docker buildx imagetools create "${TAGS[@]}" "${DIGESTS[@]}"
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.IMAGE }}@sha256:%s ' *)
 
       - name: 🔏 Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
 
-      - name: 🔏 Sign image with cosign
+      - name: 🔏 Sign image
         run: |
           DIGEST=$(docker buildx imagetools inspect \
-            ${{ env.IMAGE }}:${{ needs.release-pr.outputs.version }} \
+            ${{ env.IMAGE }}:${{ needs.release-pr.outputs.app_version }} \
             --format '{{.Manifest.Digest}}')
           cosign sign --yes "${{ env.IMAGE }}@${DIGEST}"
+
+  docker-mcp-build:
+    needs: release-pr
+    if: needs.release-pr.outputs.should_publish_mcp == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      IMAGE: vikas027/quiz-prep-mcp
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          ref: main
+
+      - name: 🏷️ Set platform pair
+        run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+
+      - name: 🔑 Check secrets
+        run: |
+          [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] || { echo "DOCKERHUB_USERNAME not set" >&2; exit 1; }
+          [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ] || { echo "DOCKERHUB_TOKEN not set" >&2; exit 1; }
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
+      - name: 🔑 Log in to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 🐳 Build and push by digest
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        id: build
+        with:
+          context: mcp
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=mcp-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=mcp-${{ env.PLATFORM_PAIR }}
+
+      - name: 💾 Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest='${{ steps.build.outputs.digest }}'
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: 📤 Upload digest artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: digests-mcp-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  docker-mcp-merge:
+    needs: [release-pr, docker-mcp-build]
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: vikas027/quiz-prep-mcp
+    steps:
+      - name: 📥 Download digest artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-mcp-*
+          merge-multiple: true
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
+      - name: 🔑 Log in to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 🏷️ Generate image tags
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=${{ needs.release-pr.outputs.mcp_version }}
+            type=raw,value=v${{ needs.release-pr.outputs.mcp_version }}
+            type=raw,value=latest
+
+      - name: 🐳 Create and push multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.IMAGE }}@sha256:%s ' *)
+
+  release-publish:
+    needs: [release-pr, docker-app-merge, docker-mcp-merge]
+    if: |
+      always() &&
+      needs.release-pr.result == 'success' &&
+      (needs.release-pr.outputs.should_publish_app != 'true' || needs.docker-app-merge.result == 'success') &&
+      (needs.release-pr.outputs.should_publish_mcp != 'true' || needs.docker-mcp-merge.result == 'success') &&
+      (needs.release-pr.outputs.should_publish_app == 'true' || needs.release-pr.outputs.should_publish_mcp == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          ref: main
+
+      - name: 🚀 Create GitHub release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ secrets.GITHUB_TOKEN }}
