@@ -1,0 +1,207 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quiz
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: quiz-data
+  namespace: quiz
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 500Mi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quiz
+  namespace: quiz
+  labels:
+    app: quiz
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quiz
+  template:
+    metadata:
+      labels:
+        app: quiz
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: quiz
+          image: vikas027/quiz-prep:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: QUIZ_DB
+              value: /app/data/quiz.db
+            - name: PORT
+              value: "8080"
+          volumeMounts:
+            - name: quiz-data
+              mountPath: /app/data
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          readinessProbe:
+            httpGet:
+              path: /api/v1/quizzes
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/quizzes
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: quiz-data
+          persistentVolumeClaim:
+            claimName: quiz-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quiz
+  namespace: quiz
+spec:
+  selector:
+    app: quiz
+  ports:
+    - port: 80
+      targetPort: 8080
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quiz-mcp
+  namespace: quiz
+  labels:
+    app: quiz-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quiz-mcp
+  template:
+    metadata:
+      labels:
+        app: quiz-mcp
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: quiz-mcp
+          image: vikas027/quiz-prep-mcp:v0.1.0
+          ports:
+            - containerPort: 8000
+          env:
+            - name: QUIZ_APP_URL
+              value: http://quiz
+            - name: MCP_PORT
+              value: "8000"
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: MCP_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: quiz-mcp-auth
+                  key: token
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quiz-mcp
+  namespace: quiz
+spec:
+  selector:
+    app: quiz-mcp
+  ports:
+    - port: 8000
+      targetPort: 8000
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: quiz-mcp
+  namespace: quiz
+spec:
+  podSelector:
+    matchLabels:
+      app: quiz-mcp
+  ingress:
+    - ports:
+        - port: 8000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: quiz
+      ports:
+        - port: 8080  # direct pod port
+        - port: 80    # quiz Service VIP (pre-DNAT, Cilium evaluates here)
+    - ports:          # kube-dns
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

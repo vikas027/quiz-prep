@@ -1,0 +1,89 @@
+---
+quiz_name: "CCAF"
+questions:
+  - question: 'Your coordinator agent spawns three subagents in separate turns: first the search agent,
+      waits for results, then the analysis agent, waits for results, then the synthesis agent. What optimization
+      would significantly reduce latency?'
+    choices:
+      - A. Use a faster model for each subagent
+      - B. Pre-cache the search results so the search agent runs faster
+      - C. Spawn the search and analysis agents in parallel by emitting multiple Task tool calls in a single
+        coordinator response
+      - D. Combine all three subagents into a single agent with all tools
+    answer: C. Spawn the search and analysis agents in parallel by emitting multiple Task tool calls in
+      a single coordinator response
+    category: Agentic Architecture & Orchestration
+    explanation: Emitting multiple Task tool calls in a single coordinator response runs those agents concurrently.
+      Total latency becomes max(search, analysis) + synthesis instead of search + analysis + synthesis.
+    choice_explanations:
+      A: Using a faster model reduces per-call latency but does not change the sequential dependency between
+        turns. Three serial turns still take search + analysis + synthesis time regardless of model speed.
+      B: Pre-caching speeds up the search agent individually, but all three agents still execute serially
+        across separate turns. The structure of the pipeline is the bottleneck, not the search agent's runtime.
+      C: Correct — emitting multiple Task tool calls in one response spawns the search and analysis agents
+        in parallel. Once both complete, synthesis runs on the combined results, cutting total latency significantly.
+      D: Merging all three agents into one increases context size, removes isolation, and makes parallelism
+        harder to achieve. It trades flexibility for monolithic complexity without addressing the latency problem.
+  - question: You're designing a code review pipeline. For each file, Claude analyzes it locally, then a
+      final pass checks cross-file issues. Which task decomposition pattern is this?
+    choices:
+      - A. Single-pass comprehensive review
+      - B. Per-file local analysis plus cross-file integration pass (prompt chaining)
+      - C. Fan-out/fan-in pattern
+      - D. Dynamic adaptive decomposition
+    answer: B. Per-file local analysis plus cross-file integration pass (prompt chaining)
+    disabled: true
+    category: Agentic Architecture & Orchestration
+  - question: You're configuring MCP servers for your team. Shared team tooling should be version-controlled,
+      while you want to experiment with a personal MCP server. Where should each be configured?
+    choices:
+      - A. Both in .claude/settings.json
+      - 'B. Shared: CLAUDE.md. Personal: ~/.claude/CLAUDE.md'
+      - 'C. Shared: .mcp.json in project root. Personal: ~/.claude.json'
+      - D. Both in ~/.claude.json with comments marking which are personal
+    answer: 'C. Shared: .mcp.json in project root. Personal: ~/.claude.json'
+    category: Tool Design & MCP Integration
+    explanation: Project-scoped MCP servers go in .mcp.json in the project root (checked into version control,
+      available to all team members). Personal/experimental servers go in ~/.claude.json (user-level, not
+      shared). This separation ensures team tooling is consistent while allowing individual experimentation.
+  - question: You are building an MCP server. A client requests a resource that requires a database lookup
+      taking 8 seconds. What transport mechanism is best suited for this?
+    choices:
+      - A. REST API with a 30-second timeout
+      - B. A webhook-based transport where the server calls back when ready
+      - C. stdio transport, since it's synchronous and reliable
+      - D. SSE (Server-Sent Events) transport, which supports streaming and keeps the connection open during
+        long operations
+    answer: D. SSE (Server-Sent Events) transport, which supports streaming and keeps the connection open
+      during long operations
+    category: Tool Design & MCP Integration
+    explanation: SSE (Server-Sent Events) transport is designed for long-lived connections and can stream
+      partial results back to the client while the operation is in progress. stdio is synchronous and blocks
+      the client for the full 8 seconds without progress updates. Long-running operations benefit from SSE's
+      ability to send intermediate status and final results over an open connection.
+  - question: The same Claude session that generated code is asked to review it. Why might this produce
+      lower-quality reviews?
+    choices:
+      - A. The code is too fresh in context and needs time to 'settle'
+      - B. The session has used too many tokens, reducing quality
+      - C. Claude Code has a bias toward approving recently written code
+      - D. The model retains reasoning context from generation, making it less likely to question its own
+        decisions
+    answer: D. The model retains reasoning context from generation, making it less likely to question its
+      own decisions
+    category: Claude Code Configuration
+    explanation: 'Self-review limitations are fundamental: a model retains reasoning context from generation,
+      making it less likely to question its own decisions. Independent review instances (without the generator''s
+      reasoning context) are more effective at catching subtle issues. This is why CI reviews should use
+      separate sessions from code generation.'
+  - question: A team wants to ensure Claude Code never uses a specific deprecated API endpoint in their
+      codebase. What is the most effective way to enforce this?
+    choices:
+      - A. Add a rule in CLAUDE.md specifying the deprecated endpoint and its replacement, plus a hook that
+        greps for the old endpoint in changed files
+      - B. Mention it in the onboarding documentation
+      - C. Block the endpoint at the network level
+      - D. Hope developers catch it in code review
+    answer: A. Add a rule in CLAUDE.md specifying the deprecated endpoint and its replacement, plus a hook
+      that greps for the old endpoint in changed files
+    category: Claude Code Configuration

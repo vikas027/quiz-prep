@@ -1,0 +1,218 @@
+[tools]
+python = "3.14.6"
+
+[env]
+# Base URL of the deployed quiz instance — override in .mise.local.toml (gitignored)
+QUIZ_MCP_URL = "https://your-domain.example.com"
+
+[tasks.install]
+description = "Install all pinned dependencies"
+run = "pip install -r requirements-dev.txt -e ."
+
+[tasks.dev]
+depends = ['clean', 'reset-db', 'install', 'lint', 'test', 'install', 'docs-build']
+description = "Run dev server with auto-reload → http://localhost:8080"
+run = """
+pkill -f "uvicorn src.api.main" 2>/dev/null || true
+uvicorn src.api.main:app --reload --port 8080
+"""
+
+[tasks.quiz]
+description = "Run CLI quiz (interactive)"
+run = "quiz run"
+
+[tasks.test]
+description = "Run pytest suite"
+run = "pytest tests/cli/ -v"
+
+[tasks.lint]
+description = "Run ruff check + format check"
+run = "ruff check . && ruff format --check ."
+
+[tasks.hurl]
+description = "Run Hurl API tests (waits for server on :8080, then runs all .hurl files)"
+run = """
+echo "Waiting for server on :8080..."
+for i in $(seq 1 30); do
+  curl -sf http://localhost:8080/api/v1/quizzes >/dev/null 2>&1 && break
+  if [ "$i" -eq 30 ]; then
+    echo "✗ Server not ready after 30s — run 'mise run dev' or 'mise run up' first"
+    exit 1
+  fi
+  sleep 1
+done
+echo "Server ready"
+hurl --test --file-root . tests/api/*.hurl
+"""
+
+[tasks.build]
+description = "Build Docker image via docker compose"
+run = "docker compose build"
+
+[tasks.up]
+depends = ['clean', 'lint', 'test', 'install', 'build', 'docs-build']
+description = "Build and start via docker compose → http://localhost:8080"
+run = "docker compose up --build -d && echo 'Running at http://localhost:8080'"
+
+[tasks.down]
+description = "Stop docker compose"
+run = "docker compose down"
+
+[tasks.logs]
+description = "Tail docker compose logs"
+run = "docker compose logs -f"
+
+[tasks.k8s-apply]
+description = "Apply all K8s manifests"
+run = "kubectl apply -f k8s.yaml"
+
+[tasks.k8s-status]
+description = "Show pod and PVC status"
+run = "kubectl get pods,svc,pvc -l app=quiz"
+
+[tasks.k8s-logs]
+description = "Tail K8s pod logs"
+run = "kubectl logs -l app=quiz -f"
+
+[tasks.k8s-delete]
+description = "Remove deployment + service + ingress (keeps PVC)"
+run = "kubectl delete deployment,service,ingress quiz"
+
+[tasks.seed-claude]
+description = "Import Claude Certifications sample questions (replaces existing)"
+run = "quiz questions load tests/fixtures/claude.yaml --replace"
+
+[tasks.seed-aws]
+description = "Import AWS SA sample questions (replaces existing)"
+run = "quiz questions load tests/fixtures/aws-sa.yaml --replace"
+
+[tasks.seed-cka]
+description = "Import CKA sample questions (replaces existing)"
+run = "quiz questions load tests/fixtures/cka.yaml --replace"
+
+[tasks.seed-gitops]
+description = "Import GitOps sample questions (replaces existing)"
+run = "quiz questions load tests/fixtures/gitops.yaml --replace"
+
+[tasks.seed-all]
+description = "Seed all question banks — via API if server is running, otherwise via CLI"
+run = "python3 scripts/seed.py"
+
+[tasks.reset-db]
+description = "Delete the local DB and re-seed via CLI (use when server is NOT running)"
+run = """
+rm -f data/quiz.db
+"""
+
+[tasks.docs-serve]
+depends = ['install']
+description = "Preview docs locally → http://127.0.0.1:8000"
+run = "mkdocs serve"
+
+[tasks.docs-build]
+depends = ['install']
+description = "Build static docs site (strict mode)"
+run = "mkdocs build --strict"
+
+[tasks.seed-k8s]
+description = "Copy all seed fixtures into the running K8s pod"
+run = """
+POD=$(kubectl get pod -l app=quiz -o name | head -1)
+for f in tests/fixtures/*.yaml; do
+  name=$(basename "$f")
+  kubectl cp "$f" "${POD}:/app/data/${name}"
+done
+"""
+
+[tasks.mcp-test]
+depends = ['install']
+description = "Run MCP unit tests"
+run = """
+pip install -r mcp/requirements.txt -q
+pytest mcp/tests/ -v
+"""
+
+[tasks.mcp-lint]
+depends = ['install']
+description = "Lint and format-check MCP code"
+run = "ruff check mcp/ && ruff format --check mcp/"
+
+[tasks.mcp-build]
+description = "Build MCP Docker image locally"
+run = "docker compose -f mcp/docker-compose.yml build 2>/dev/null || docker build -t quiz-prep-mcp:local ./mcp"
+
+[tasks.mcp-dev]
+depends = ['install']
+description = "Run MCP server locally (quiz app must be running on :8080)"
+run = """
+QUIZ_APP_URL=http://localhost:8080 python mcp/server.py
+"""
+
+[tasks.mcp-up]
+description = "Start MCP container pointing at local quiz app"
+run = "docker run --rm -p 8000:8000 -e QUIZ_APP_URL=http://host.docker.internal:8080 quiz-prep-mcp:local"
+
+[tasks.mcp-remote-seed-folder]
+description = "Import all YAML files from a folder via MCP. Usage: FOLDER=tests/fixtures mise run mcp-remote-seed-folder"
+run = """
+: "${FOLDER:?Usage: FOLDER=path/to/folder mise run mcp-remote-seed-folder}"
+for f in "${FOLDER}"/*.yaml "${FOLDER}"/*.yml; do
+  [ -f "$f" ] || continue
+  echo "→ Seeding $f ..."
+  python3 scripts/seed_mcp.py "$f"
+done
+"""
+
+[tasks.mcp-remote-seed-file]
+description = "Import a YAML into the remote quiz via MCP (no OAuth2 needed). Usage: FILE=tests/fixtures/cka.yaml mise run mcp-remote-seed-file"
+run = """
+: "${FILE:?Usage: FILE=path/to/file.yaml mise run mcp-remote-seed-file}"
+python3 scripts/seed_mcp.py "$FILE"
+"""
+
+[tasks.mcp-remote-reset-quiz]
+description = "Delete a quiz and all its questions via MCP (no OAuth2 needed). Usage: QUIZ=cka mise run mcp-remote-reset-quiz"
+run = """
+: "${QUIZ:?Usage: QUIZ=cka mise run mcp-remote-reset-quiz}"
+python3 scripts/reset_mcp.py "$QUIZ"
+"""
+
+[tasks.mcp-remote-health]
+description = "Check MCP server health (uses QUIZ_MCP_URL from [env])"
+run = """
+echo "Checking ${QUIZ_MCP_URL}/mcp/health ..."
+curl -sf "${QUIZ_MCP_URL}/mcp/health" && echo " OK" || { echo " FAIL"; exit 1; }
+"""
+
+[tasks.mcp-claude-add]
+description = "Register remote MCP with Claude CLI globally (uses QUIZ_MCP_URL from [env])"
+run = "claude mcp add --scope user --transport sse quiz-prep ${QUIZ_MCP_URL}/mcp/sse"
+
+[tasks.mcp-claude-remove]
+description = "Remove quiz-prep MCP from Claude CLI user config"
+run = "claude mcp remove --scope user quiz-prep"
+
+[tasks.mcp-dev-remote]
+depends = ['install']
+description = "Run local MCP server pointed at QUIZ_MCP_URL (set in .mise.local.toml)"
+run = """
+pip install -r mcp/requirements.txt -q
+QUIZ_APP_URL="${QUIZ_MCP_URL}" python mcp/server.py
+"""
+
+[tasks.clean]
+depends = ['reset-db']
+description = "Stop dev server, docker compose, and remove quiz_data volume"
+run = """
+echo "→ Stopping uvicorn dev server (if running)..."
+pkill -f "uvicorn src.api.main" 2>/dev/null && echo "  Killed uvicorn" || echo "  Uvicorn not running"
+
+echo "→ Stopping docker compose (if running)..."
+if docker info >/dev/null 2>&1; then
+  docker compose down --volumes 2>/dev/null && echo "  Stopped + removed quiz_data volume" || echo "  Nothing to stop"
+else
+  echo "  Docker daemon not running — skipping"
+fi
+
+echo "→ Done"
+"""

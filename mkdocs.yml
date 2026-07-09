@@ -1,0 +1,68 @@
+---
+site_name: quiz-prep
+site_description: Self-hosted certification exam practice platform
+site_url: https://vikas027.github.io/quiz-prep/
+repo_url: https://github.com/vikas027/quiz-prep
+repo_name: vikas027/quiz-prep
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.action.edit
+    - content.code.copy
+    - content.code.annotate
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+
+nav:
+  - Home: index.md
+  - Quiz Settings: quiz-settings.md
+  - Question Format: question-format.md
+  - API Reference: api.md
+  - CLI Reference: cli.md
+  - MCP Server: mcp-server.md
+  - Tools: tools.md
+  - Releases: releases.md
+  - Contributing: contributing.md
+  - Security: security.md

@@ -1,0 +1,179 @@
+---
+# Release — runs on push to main when code or dependency files change.
+# Creates or updates a release PR via release-please, auto-merges it, then builds
+# a multi-arch Docker image (amd64 + arm64), pushes to Docker Hub, and signs with cosign.
+# Does NOT trigger on: docs/*, *.md, .github/**, tests/**
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "pyproject.toml"
+      - "Dockerfile"
+      - "tests/**"
+      - "requirements.txt"
+      - "requirements-dev.txt"
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release-pr:
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.versions.outputs.changed }}
+      version: ${{ steps.versions.outputs.version }}
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: 🏷️ Create or update release PR
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
+        id: release-please
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🤖 Auto-merge release PR
+        if: steps.release-please.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRS_JSON: ${{ steps.release-please.outputs.prs }}
+        run: |
+          PR_NUMBER=$(echo "$PRS_JSON" | jq -r '.[0].number')
+          gh pr merge "$PR_NUMBER" --squash
+
+      - name: 🔖 Determine version
+        id: versions
+        run: |
+          git fetch origin main --tags --force
+          git checkout origin/main -- .release-please-manifest.json
+          VERSION=$(jq -r '."."' .release-please-manifest.json)
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  docker-build:
+    needs: release-pr
+    if: needs.release-pr.outputs.should_publish == 'true'
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      IMAGE: vikas027/quiz-prep
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: 🏷️ Set platform pair
+        run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
+      - name: 🔑 Log in to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 🏷️ Set push outputs
+        env:
+          IMG: ${{ env.IMAGE }}
+        run: |
+          OPTS="type=image,name=${IMG}"
+          OPTS="${OPTS},push-by-digest=true,name-canonical=true,push=true"
+          echo "PUSH_OUTPUTS=${OPTS}" >> "$GITHUB_ENV"
+
+      - name: 🐳 Build and push by digest
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        id: build
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          outputs: ${{ env.PUSH_OUTPUTS }}
+          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
+
+      - name: 💾 Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest='${{ steps.build.outputs.digest }}'
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: 📤 Upload digest artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          retention-days: 1
+
+  docker-merge:
+    needs: [release-pr, docker-build]
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: vikas027/quiz-prep
+    steps:
+      - name: 📥 Download digest artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
+      - name: 🔑 Log in to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 🏷️ Generate image tags
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=${{ needs.release-pr.outputs.version }}
+            type=raw,value=v${{ needs.release-pr.outputs.version }}
+            type=raw,value=latest
+
+      - name: 🐳 Create and push multi-arch manifest
+        working-directory: /tmp/digests
+        env:
+          IMAGE: ${{ env.IMAGE }}
+        run: |
+          mapfile -t TAGS < <(
+            jq -r '.tags[] | "-t " + .' <<< "$DOCKER_METADATA_OUTPUT_JSON"
+          )
+          mapfile -t DIGESTS < <(printf '%s\n' "${IMAGE}@sha256:"*)
+          docker buildx imagetools create "${TAGS[@]}" "${DIGESTS[@]}"
+
+      - name: 🔏 Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+      - name: 🔏 Sign image with cosign
+        run: |
+          DIGEST=$(docker buildx imagetools inspect \
+            ${{ env.IMAGE }}:${{ needs.release-pr.outputs.version }} \
+            --format '{{.Manifest.Digest}}')
+          cosign sign --yes "${{ env.IMAGE }}@${DIGEST}"
