@@ -1,0 +1,43 @@
+[project]
+name = "quiz"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.139.0",
+    "uvicorn[standard]>=0.50.0",
+    "gunicorn>=26.0.0",
+    "pydantic>=2.13.0",
+    "pyyaml>=6.0.3",
+    "typer>=0.26.0",
+    "rich>=15.0.0",
+    "questionary>=2.1.1",
+    "python-multipart>=0.0.32",
+]
+
+[project.scripts]
+quiz = "src.cli.main:app"
+
+
+[build-system]
+requires = ["setuptools>=70.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests/cli"]

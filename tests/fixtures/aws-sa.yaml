@@ -1,0 +1,140 @@
+---
+quiz_name: "AWS SA"
+questions:
+  - question: A company needs to store frequently accessed objects with low latency and high throughput.
+      Which S3 storage class is most appropriate?
+    choices:
+      - A. S3 Standard
+      - B. S3 Standard-IA
+      - C. S3 Glacier Instant Retrieval
+      - D. S3 One Zone-IA
+    answer: A. S3 Standard
+    category: Storage
+    explanation: S3 Standard is designed for frequently accessed data with low latency and high throughput.
+      S3 Standard-IA and One Zone-IA are for infrequently accessed data with lower storage cost but retrieval
+      fees. Glacier is for archival with retrieval times ranging from milliseconds to hours.
+    choice_explanations:
+      A: Correct — S3 Standard delivers millisecond access with no retrieval fee and no minimum storage
+        duration, making it the right fit for frequently accessed, high-throughput workloads.
+      B: S3 Standard-IA carries a per-GB retrieval fee and a 30-day minimum storage duration, making it
+        cost-inefficient for data that is accessed frequently.
+      C: Glacier Instant Retrieval is optimised for archive data accessed rarely (once per quarter). While
+        retrieval is millisecond-fast, the per-GB retrieval cost is much higher than S3 Standard.
+      D: S3 One Zone-IA stores data in a single Availability Zone (lower durability) and adds a retrieval
+        fee — the wrong fit for frequently accessed, latency-sensitive data.
+  - question: An application running on EC2 needs to read objects from an S3 bucket. What is the most secure
+      way to grant this access?
+    choices:
+      - A. Embed AWS access keys in the application code
+      - B. Store credentials in an environment variable on the instance
+      - C. Attach an IAM role to the EC2 instance with the required S3 permissions
+      - D. Create an IAM user and share its credentials with the development team
+    answer: C. Attach an IAM role to the EC2 instance with the required S3 permissions
+    disabled: true
+    category: IAM
+    explanation: IAM roles attached to EC2 instances provide temporary, automatically rotated credentials
+      via the instance metadata service. This avoids hardcoding long-term credentials, which is a security
+      anti-pattern. IAM roles are the AWS best practice for granting EC2 instances access to other AWS services.
+  - question: A VPC has a public subnet and a private subnet. An EC2 instance in the private subnet needs
+      outbound internet access to download software updates. Which solution enables this without exposing
+      the instance directly to the internet?
+    choices:
+      - A. Assign a public IP address to the private instance
+      - B. Place a NAT Gateway in the public subnet and update the private subnet route table to route 0.0.0.0/0
+        through it
+      - C. Use an Internet Gateway attached directly to the private subnet
+      - D. Configure a VPC endpoint for all internet traffic
+    answer: B. Place a NAT Gateway in the public subnet and update the private subnet route table to route
+      0.0.0.0/0 through it
+    category: Networking
+    explanation: A NAT Gateway in a public subnet translates outbound traffic from private instances, allowing
+      them to reach the internet while remaining unreachable from inbound internet connections. The private
+      subnet route table must point 0.0.0.0/0 to the NAT Gateway. Internet Gateways cannot be attached directly
+      to private subnets in a meaningful way.
+  - question: A solutions architect needs to choose between Multi-AZ and Read Replicas for an RDS MySQL
+      database. The primary requirement is automatic failover with minimal downtime. Which option satisfies
+      this?
+    choices:
+      - A. Read Replicas — they provide automatic failover across Availability Zones
+      - B. Multi-AZ deployment — it maintains a synchronous standby replica and performs automatic failover
+      - C. Both Multi-AZ and Read Replicas provide equivalent failover capability
+      - D. Neither — Route 53 health checks must be used for RDS failover
+    answer: B. Multi-AZ deployment — it maintains a synchronous standby replica and performs automatic failover
+    category: Storage
+    explanation: RDS Multi-AZ synchronously replicates data to a standby instance in a different AZ. In
+      the event of a primary instance failure, RDS automatically fails over to the standby with DNS cutover,
+      typically within 1-2 minutes. Read Replicas are asynchronous and intended for read scaling, not high
+      availability failover.
+  - question: Which IAM policy evaluation result applies when a Deny statement in one policy and an Allow
+      statement in another policy both match the same action on the same resource for the same principal?
+    choices:
+      - A. Allow takes precedence
+      - B. Deny takes precedence — an explicit Deny always overrides any Allow
+      - C. The most recently created policy wins
+      - D. The result depends on whether the policies are managed or inline
+    answer: B. Deny takes precedence — an explicit Deny always overrides any Allow
+    category: IAM
+    explanation: 'AWS IAM policy evaluation logic: all requests start with an implicit Deny. An explicit
+      Allow overrides the implicit Deny. However, an explicit Deny always overrides any Allow, regardless
+      of which policy contains it. This makes Deny statements the strongest control in IAM.'
+  - question: A company runs a stateless web application on EC2. Traffic varies significantly throughout
+      the day. Which combination provides cost-effective high availability?
+    choices:
+      - A. A single large EC2 instance with reserved pricing
+      - B. An Auto Scaling Group across multiple AZs with an Application Load Balancer
+      - C. Multiple EC2 instances in one AZ behind a Network Load Balancer
+      - D. Spot Instances in a single AZ with no load balancer
+    answer: B. An Auto Scaling Group across multiple AZs with an Application Load Balancer
+    category: Compute
+    explanation: An Auto Scaling Group automatically adjusts the number of EC2 instances based on demand,
+      providing cost efficiency by scaling down during low traffic. Distributing across multiple AZs provides
+      high availability. An Application Load Balancer distributes traffic and integrates with Auto Scaling
+      health checks to replace unhealthy instances.
+  - question: A developer needs temporary AWS credentials to deploy from a CI/CD pipeline running outside
+      AWS. Which approach follows the principle of least privilege and avoids long-term credentials?
+    choices:
+      - A. Create an IAM user with programmatic access and store the access key in the pipeline secrets
+      - B. Use IAM Identity Center with permission sets scoped to the deployment role
+      - C. Configure the pipeline to assume an IAM role via AWS STS AssumeRole using OIDC federation
+      - D. Hardcode root account credentials in the pipeline environment
+    answer: C. Configure the pipeline to assume an IAM role via AWS STS AssumeRole using OIDC federation
+    category: IAM
+    explanation: OIDC federation allows CI/CD providers (GitHub Actions, GitLab CI, etc.) to assume an IAM
+      role using short-lived OIDC tokens without storing long-term AWS credentials. STS issues temporary
+      credentials scoped to the role's permissions. This is the AWS best practice for authenticating external
+      CI/CD systems.
+  - question: An application needs to send messages from multiple producers to multiple consumers, where
+      each consumer processes every message independently. Which AWS service fits this pattern?
+    choices:
+      - A. SQS Standard Queue — each message is delivered to one consumer only
+      - B. SNS Topic with subscriptions — messages are pushed to all subscribers
+      - C. SQS FIFO Queue — messages are processed in order
+      - D. Kinesis Data Streams — designed for real-time analytics, not fan-out messaging
+    answer: B. SNS Topic with subscriptions — messages are pushed to all subscribers
+    category: Compute
+    explanation: SNS (Simple Notification Service) implements a pub/sub fan-out model where each published
+      message is delivered to all topic subscribers. SQS queues are point-to-point where a message is consumed
+      by one worker. For fan-out where every consumer receives every message, SNS is the correct choice.
+  - question: A solutions architect must ensure that data in an S3 bucket is never publicly accessible,
+      even if a future misconfigured bucket policy accidentally allows public access. Which control achieves
+      this?
+    choices:
+      - A. Enable default encryption on the bucket
+      - B. Enable S3 Block Public Access settings at the account or bucket level
+      - C. Apply a bucket policy that denies all s3:GetObject calls
+      - D. Require MFA delete on all objects
+    answer: B. Enable S3 Block Public Access settings at the account or bucket level
+    category: Storage
+    explanation: S3 Block Public Access is a set of account-level and bucket-level controls that override
+      bucket policies and ACLs to prevent public access. Even if a bucket policy is later misconfigured
+      to allow public access, Block Public Access settings override it. This is the recommended guardrail
+      to prevent accidental data exposure.
+  - question: Which EC2 purchasing option provides the largest discount compared to On-Demand pricing and
+      is best suited for fault-tolerant, flexible workloads like batch processing?
+    choices:
+      - A. Reserved Instances — 1-year term with no upfront payment
+      - B. Dedicated Hosts — physical server isolation for compliance
+      - C. Spot Instances — up to 90% discount, can be interrupted with 2-minute notice
+      - D. Savings Plans — flexible pricing commitment across instance families
+    answer: C. Spot Instances — up to 90% discount, can be interrupted with 2-minute notice
+    category: Compute

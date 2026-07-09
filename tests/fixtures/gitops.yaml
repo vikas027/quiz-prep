@@ -1,0 +1,150 @@
+---
+quiz_name: "GitOps"
+questions:
+  - question: What is the fundamental principle that distinguishes GitOps from traditional push-based CI/CD
+      deployment?
+    choices:
+      - A. GitOps uses containers while traditional CI/CD uses virtual machines
+      - B. In GitOps, a controller running in the cluster continuously reconciles cluster state to match
+        the desired state declared in Git, rather than a pipeline pushing changes from outside
+      - C. GitOps requires Kubernetes while traditional CI/CD works with any platform
+      - D. GitOps eliminates the need for CI pipelines entirely
+    answer: B. In GitOps, a controller running in the cluster continuously reconciles cluster state to match
+      the desired state declared in Git, rather than a pipeline pushing changes from outside
+    category: GitOps Principles
+    explanation: 'The core GitOps pattern is pull-based: an agent (Flux, ArgoCD) running inside the cluster
+      polls Git and applies changes automatically, compared to push-based CD where an external pipeline
+      applies changes by pushing kubectl commands or API calls into the cluster. This pull model improves
+      security (no external credentials to manage), provides self-healing, and decouples deployment from
+      CI.'
+    choice_explanations:
+      A: Container usage is not what distinguishes GitOps — traditional CI/CD pipelines can also deploy
+        containers. The distinction is the pull-based vs push-based deployment model.
+      B: Correct — an in-cluster controller (Flux, ArgoCD) continuously reconciles actual cluster state to
+        match the Git-declared desired state. No external pipeline pushes changes in; the cluster pulls them.
+      C: GitOps principles apply beyond Kubernetes — the pattern works with Terraform, Ansible, or any system
+        where state can be declared in Git and reconciled by an agent. Kubernetes is not a requirement.
+      D: GitOps does not remove CI pipelines — CI still builds, tests, and publishes artefacts. GitOps replaces
+        only the CD push step with in-cluster pull-based reconciliation.
+  - question: In Flux, which resource type watches a Git repository for changes and triggers reconciliation?
+    choices:
+      - A. HelmRelease
+      - B. Kustomization
+      - C. GitRepository
+      - D. ImagePolicy
+    answer: C. GitRepository
+    disabled: true
+    category: Flux
+    explanation: The GitRepository source resource in Flux (part of the source-controller) monitors a Git
+      repository at a defined interval and fetches the latest revision. Other Flux resources like Kustomization
+      and HelmRelease reference a GitRepository (or other source) to know what to reconcile. HelmRelease
+      manages Helm charts; Kustomization applies manifests via kustomize.
+  - question: An ArgoCD Application is showing OutOfSync status even though the manifests in Git match what
+      is deployed. What is the most common cause?
+    choices:
+      - A. The ArgoCD server has crashed and needs a restart
+      - B. A live resource has fields added by Kubernetes defaulting (e.g., default labels or status fields)
+        that differ from the Git source
+      - C. The namespace does not exist in the cluster
+      - D. The Git repository is unreachable
+    answer: B. A live resource has fields added by Kubernetes defaulting (e.g., default labels or status
+      fields) that differ from the Git source
+    category: ArgoCD
+    explanation: ArgoCD computes a diff between the Git-declared state and the live cluster state. Kubernetes
+      automatically adds fields like default values, managed fields annotations, and status subresources
+      that are not present in the Git manifests. These differences trigger OutOfSync. ArgoCD's ignoreDifferences
+      configuration can suppress known noisy fields.
+  - question: What is the purpose of an ArgoCD AppProject?
+    choices:
+      - A. To group multiple ArgoCD servers into a management hierarchy
+      - 'B. To define RBAC boundaries: which Git repositories, destination clusters/namespaces, and cluster
+        resources an Application can use'
+      - C. To store encrypted secrets for applications managed by ArgoCD
+      - D. To configure the ArgoCD sync schedule and retry policy
+    answer: 'B. To define RBAC boundaries: which Git repositories, destination clusters/namespaces, and
+      cluster resources an Application can use'
+    category: ArgoCD
+    explanation: AppProjects are ArgoCD's multi-tenancy mechanism. They restrict which source repositories
+      Applications in the project can use, which destination clusters and namespaces they can deploy to,
+      and which Kubernetes resource types they can manage. This provides isolation between teams sharing
+      an ArgoCD instance.
+  - question: 'A Flux Kustomization has spec.prune: true. What happens when a manifest is deleted from the
+      Git repository?'
+    choices:
+      - A. Nothing — Flux only creates and updates resources, never deletes them
+      - B. Flux marks the resource for deletion but waits for manual approval
+      - C. Flux deletes the corresponding Kubernetes resource from the cluster during the next reconciliation
+      - D. Flux moves the resource to a quarantine namespace
+    answer: C. Flux deletes the corresponding Kubernetes resource from the cluster during the next reconciliation
+    category: Flux
+    explanation: 'When spec.prune: true is set on a Flux Kustomization, Flux tracks all resources it has
+      applied and garbage-collects any resource that is no longer present in the Git source. This ensures
+      the cluster state strictly mirrors the Git state, preventing orphaned resources from accumulating
+      over time.'
+  - question: Which ArgoCD annotation controls the order in which resources are applied during a sync, ensuring
+      a Namespace exists before a Deployment that uses it?
+    choices:
+      - 'A. argocd.argoproj.io/sync-options: Replace=true'
+      - 'B. argocd.argoproj.io/sync-wave: "-1"'
+      - 'C. argocd.argoproj.io/hook: PreSync'
+      - 'D. argocd.argoproj.io/managed-by: argocd'
+    answer: 'B. argocd.argoproj.io/sync-wave: "-1"'
+    category: ArgoCD
+    explanation: ArgoCD applies resources in wave order using the argocd.argoproj.io/sync-wave annotation.
+      Resources with lower wave numbers are applied (and must be healthy) before higher wave numbers. Annotating
+      a Namespace with wave -1 and a Deployment with wave 0 ensures the Namespace exists before the Deployment
+      is created.
+  - question: In GitOps, a developer directly patches a Deployment in the cluster using kubectl. A few minutes
+      later, the change is reverted automatically. What component is responsible for this behavior?
+    choices:
+      - A. Kubernetes RBAC denied the patch and rolled it back
+      - B. The GitOps controller detected drift between the live state and the Git-declared state and reconciled
+        the cluster back to match Git
+      - C. A PodDisruptionBudget prevented the change from persisting
+      - D. The CI pipeline re-deployed the application on a schedule
+    answer: B. The GitOps controller detected drift between the live state and the Git-declared state and
+      reconciled the cluster back to match Git
+    category: GitOps Principles
+    explanation: GitOps controllers (Flux, ArgoCD) continuously compare the cluster's live state against
+      the desired state in Git. When a manual change (drift) is detected, the controller reconciles by re-applying
+      the Git-declared state, effectively reverting the manual change. This self-healing property is a key
+      benefit of GitOps and enforces Git as the single source of truth.
+  - question: Flux's image-automation-controller is used to update image tags in Git automatically. What
+      Flux resource specifies the policy for selecting the latest image tag (e.g., semver ~1.2)?
+    choices:
+      - A. ImageRepository
+      - B. ImageUpdateAutomation
+      - C. ImagePolicy
+      - D. HelmChart
+    answer: C. ImagePolicy
+    category: Flux
+    explanation: The ImagePolicy resource in Flux defines the selection criteria for image tags — semver
+      ranges, alphabetical order, or numerical ordering. ImageRepository scans a container registry for
+      available tags. ImageUpdateAutomation commits the selected image tag back to Git. These three resources
+      work together to automate image update workflows.
+  - question: An organization uses a single ArgoCD instance to manage clusters across dev, staging, and
+      production. They want changes to only reach production after manual approval. Which ArgoCD feature
+      enables this?
+    choices:
+      - A. Set the production Application to automated sync with selfHeal disabled
+      - B. Configure the production Application with syncPolicy.automated omitted (manual sync) so it requires
+        a human to trigger sync
+      - C. Use AppProject sourceRepos to restrict who can push to the production Git branch
+      - D. Add a PreSync hook that sends an approval request email
+    answer: B. Configure the production Application with syncPolicy.automated omitted (manual sync) so it
+      requires a human to trigger sync
+    category: ArgoCD
+    explanation: ArgoCD supports both automated and manual sync modes per Application. Setting syncPolicy.automated
+      on dev/staging Applications allows automatic reconciliation when Git changes. Omitting syncPolicy.automated
+      on the production Application means it will show OutOfSync status when Git changes but will not apply
+      them until a human explicitly triggers a sync via the UI, CLI, or API.
+  - question: What does 'declarative configuration' mean in the context of GitOps, and why is it important?
+    choices:
+      - A. Configuration is written in a DSL that is declarative but stored in a database, not Git
+      - B. The desired system state is described as configuration files (YAML/JSON) that specify what should
+        exist, not the imperative steps to get there — this enables drift detection and automated reconciliation
+      - C. All configuration changes require a formal declaration signed by two engineers
+      - D. Declarative configuration means using Helm charts instead of raw Kubernetes manifests
+    answer: B. The desired system state is described as configuration files (YAML/JSON) that specify what
+      should exist, not the imperative steps to get there — this enables drift detection and automated reconciliation
+    category: GitOps Principles

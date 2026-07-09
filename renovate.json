@@ -1,0 +1,72 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["at 09:00 on sunday"],
+  "enabledManagers": ["pre-commit", "pip_requirements", "custom.regex"],
+  "packageRules": [
+    {
+      "matchManagers": ["pre-commit"],
+      "groupName": "pre-commit hooks",
+      "commitMessagePrefix": "chore(ci):"
+    },
+    {
+      "matchManagers": ["pip_requirements"],
+      "groupName": "python dependencies",
+      "commitMessagePrefix": "fix(deps):"
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "groupName": "custom tool versions",
+      "commitMessagePrefix": "fix(deps):"
+    },
+    {
+      "matchFileNames": ["mcp/requirements.txt"],
+      "groupName": "mcp dependencies",
+      "commitMessagePrefix": "fix(mcp):"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
+      "matchStrings": ["version: \"(?<currentValue>[\\d.]+)\"  # https://github.com/Orange-OpenSource/hurl/releases"],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "Orange-OpenSource/hurl"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^mise\\.toml$/"],
+      "matchStrings": ["python = \"(?<currentValue>[\\d.]+)\""],
+      "datasourceTemplate": "python-version",
+      "depNameTemplate": "python"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^Dockerfile$/"],
+      "matchStrings": ["FROM python:(?<currentValue>[\\d.]+)-slim"],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "python",
+      "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^Dockerfile$/"],
+      "matchStrings": ["mkdocs-material==(?<currentValue>[\\d.]+)"],
+      "datasourceTemplate": "pypi",
+      "depNameTemplate": "mkdocs-material"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^src/web/index\\.html$/"],
+      "matchStrings": ["@tailwindcss/browser@(?<currentValue>[\\d.]+)"],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "@tailwindcss/browser"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^mcp/requirements\\.txt$/"],
+      "matchStrings": ["(?<depName>[a-zA-Z0-9_-]+)==(?<currentValue>[\\d.]+)"],
+      "datasourceTemplate": "pypi"
+    }
+  ]
+}

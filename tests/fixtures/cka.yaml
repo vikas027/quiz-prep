@@ -1,0 +1,141 @@
+---
+quiz_name: "CKA"
+questions:
+  - question: A Pod is stuck in Pending state. kubectl describe pod shows 'Insufficient cpu'. What is the
+      most likely cause?
+    choices:
+      - A. The Pod's container image cannot be pulled from the registry
+      - B. No node in the cluster has enough available CPU to satisfy the Pod's resource requests
+      - C. The Pod's liveness probe is failing
+      - D. The namespace has no NetworkPolicy allowing the Pod to start
+    answer: B. No node in the cluster has enough available CPU to satisfy the Pod's resource requests
+    category: Workloads
+    explanation: '''Insufficient cpu'' in a Pod''s events means the scheduler cannot find a node with enough
+      unallocated CPU to meet the Pod''s resource requests. This is a scheduling failure, not a runtime
+      failure. Solutions include adding nodes, reducing Pod CPU requests, or removing other Pods consuming
+      CPU on existing nodes.'
+    choice_explanations:
+      A: An image pull failure shows as ImagePullBackOff or ErrImagePull in Pod events — not 'Insufficient
+        cpu'. The Pod would still be in Pending but for a different reason.
+      B: Correct — 'Insufficient cpu' means no node has enough unallocated CPU to satisfy the Pod's resource
+        requests. Fix by adding nodes, lowering CPU requests, or freeing capacity on existing nodes.
+      C: Liveness probe failures occur after the container starts and cause restarts (CrashLoopBackOff),
+        not Pending state. The Pod must be scheduled and running before probes execute.
+      D: NetworkPolicy controls traffic flow between Pods — it has no effect on the scheduler's ability to
+        place a Pod on a node and cannot cause Pending state.
+  - question: You need to ensure a DaemonSet Pod runs on every node including control-plane nodes that have
+      taints. What must you add to the DaemonSet spec?
+    disabled: true
+    choices:
+      - A. A nodeSelector targeting control-plane nodes
+      - B. A toleration matching the control-plane taint (node-role.kubernetes.io/control-plane:NoSchedule)
+      - C. A priorityClass set to system-cluster-critical
+      - D. An affinity rule with preferredDuringSchedulingIgnoredDuringExecution
+    answer: B. A toleration matching the control-plane taint (node-role.kubernetes.io/control-plane:NoSchedule)
+    category: Workloads
+    explanation: Control-plane nodes carry a NoSchedule taint (node-role.kubernetes.io/control-plane:NoSchedule)
+      by default, which prevents regular Pods from being scheduled there. To schedule a DaemonSet Pod on
+      tainted nodes, the DaemonSet must include a toleration for that taint. Without it, the scheduler skips
+      tainted nodes.
+  - question: A Service of type ClusterIP exposes a Deployment. Pods in other namespaces cannot resolve
+      the Service by its short name. What DNS name must they use?
+    choices:
+      - A. <service-name> — short names resolve cluster-wide
+      - B. <service-name>.<namespace>.svc.cluster.local
+      - C. <service-name>.<namespace>
+      - D. <pod-ip>.<namespace>.pod.cluster.local
+    answer: B. <service-name>.<namespace>.svc.cluster.local
+    category: Networking
+    explanation: 'Kubernetes DNS resolves short service names only within the same namespace. From a different
+      namespace, the fully qualified domain name (FQDN) must be used: <service-name>.<namespace>.svc.cluster.local.
+      CoreDNS provides this resolution automatically for all Services with a ClusterIP.'
+  - question: A PersistentVolumeClaim is in Pending state. kubectl get pvc shows no bound PersistentVolume
+      exists. What is the most likely cause when dynamic provisioning is not configured?
+    choices:
+      - A. The PVC's storageClassName does not match any available PersistentVolume's storageClassName
+      - B. The namespace does not have a ResourceQuota allowing PVC creation
+      - C. The Pod using the PVC has not been created yet
+      - D. The PVC's accessMode is ReadWriteMany, which is unsupported
+    answer: A. The PVC's storageClassName does not match any available PersistentVolume's storageClassName
+    category: Storage
+    explanation: For static provisioning, a PVC binds to a PV that matches its storageClassName, accessModes,
+      and capacity. If no PV exists with a matching storageClassName, the PVC remains Pending indefinitely.
+      Check that the PV's storageClassName, accessModes, and capacity all satisfy the PVC's requirements.
+  - question: You want to prevent a Pod from being scheduled on the same node as another Pod with label
+      app=cache. Which Pod spec field achieves this?
+    choices:
+      - A. nodeSelector — select nodes that don't have the cache Pod
+      - B. podAntiAffinity with requiredDuringSchedulingIgnoredDuringExecution targeting label app=cache
+      - C. taints on the node where the cache Pod runs
+      - D. topologySpreadConstraints with maxSkew=0
+    answer: B. podAntiAffinity with requiredDuringSchedulingIgnoredDuringExecution targeting label app=cache
+    category: Workloads
+    explanation: podAntiAffinity with requiredDuringSchedulingIgnoredDuringExecution enforces that the Pod
+      is never scheduled on a node that already runs a Pod matching the specified label selector. This is
+      the correct mechanism for co-location avoidance (anti-affinity). nodeSelector operates on node labels,
+      not Pod labels.
+  - question: A NetworkPolicy is applied to a namespace. After applying it, Pods in the namespace can no
+      longer communicate with Pods in other namespaces. What does this indicate about the NetworkPolicy?
+    choices:
+      - A. The NetworkPolicy has an ingress rule that explicitly denies all cross-namespace traffic
+      - B. The NetworkPolicy selects all Pods in the namespace and has no ingress rules, creating a default
+        deny-all ingress policy
+      - C. NetworkPolicies always block cross-namespace traffic by design
+      - D. The CNI plugin is not correctly installed
+    answer: B. The NetworkPolicy selects all Pods in the namespace and has no ingress rules, creating a
+      default deny-all ingress policy
+    category: Networking
+    explanation: A NetworkPolicy that selects Pods (via podSelector) but contains no ingress rules creates
+      a default deny-all ingress policy for those Pods. Any ingress traffic not explicitly permitted by
+      an ingress rule is dropped. To allow cross-namespace traffic, add an ingress rule with a namespaceSelector
+      matching the source namespace.
+  - question: You need to store a TLS certificate and key as a Kubernetes Secret and mount them into a Pod
+      as files. Which Secret type should you use?
+    choices:
+      - A. Opaque
+      - B. kubernetes.io/tls
+      - C. kubernetes.io/dockerconfigjson
+      - D. kubernetes.io/service-account-token
+    answer: B. kubernetes.io/tls
+    category: Security
+    explanation: The kubernetes.io/tls Secret type is specifically designed for TLS certificate/key pairs.
+      It requires tls.crt and tls.key data fields. While an Opaque Secret could store the same data, using
+      the typed Secret allows Kubernetes and controllers (like Ingress controllers) to validate the structure
+      and handle TLS certificates correctly.
+  - question: A cluster administrator wants to restrict which users can create Pods in a specific namespace.
+      Which Kubernetes objects are needed?
+    choices:
+      - A. A ClusterRole and ClusterRoleBinding granting Pod creation cluster-wide
+      - B. A Role with create/get/list verbs on pods resource, and a RoleBinding binding it to the user
+        in the target namespace
+      - C. A PodSecurityPolicy applied to the namespace
+      - D. A ResourceQuota limiting the number of Pods in the namespace
+    answer: B. A Role with create/get/list verbs on pods resource, and a RoleBinding binding it to the user
+      in the target namespace
+    category: Security
+    explanation: RBAC Roles are namespace-scoped and define permissions within a namespace. A Role with
+      verbs [create, get, list] on the pods resource, bound to the user via a RoleBinding in the target
+      namespace, grants namespace-scoped Pod creation rights. ClusterRoles and ClusterRoleBindings would
+      grant cluster-wide access, violating least privilege.
+  - question: kubectl drain node01 fails with 'cannot delete Pods not managed by ReplicationController,
+      ReplicaSet, Job, DaemonSet or StatefulSet'. What flag is needed to proceed?
+    choices:
+      - A. --force — deletes unmanaged Pods and proceeds with drain
+      - B. --ignore-daemonsets — skips DaemonSet-managed Pods
+      - C. --delete-emptydir-data — allows deleting Pods with emptyDir volumes
+      - D. --grace-period=0 — bypasses termination grace periods
+    answer: A. --force — deletes unmanaged Pods and proceeds with drain
+    category: Workloads
+    explanation: kubectl drain will not delete Pods that are not managed by a controller (standalone Pods)
+      unless --force is specified, because they cannot be rescheduled. Using --force acknowledges that these
+      Pods will be permanently deleted. For DaemonSet Pods, --ignore-daemonsets is needed separately. Both
+      flags are commonly combined.
+  - question: An etcd cluster needs to be backed up. Which command creates a snapshot of etcd data?
+    choices:
+      - A. kubectl backup etcd --output=/backup/etcd.db
+      - B. etcdctl snapshot save /backup/etcd.db --endpoints=https://127.0.0.1:2379 --cacert --cert --key
+      - C. cp -r /var/lib/etcd /backup/etcd
+      - D. systemctl stop etcd && tar -czf /backup/etcd.tar.gz /var/lib/etcd
+    answer: B. etcdctl snapshot save /backup/etcd.db --endpoints=https://127.0.0.1:2379 --cacert --cert
+      --key
+    category: Security

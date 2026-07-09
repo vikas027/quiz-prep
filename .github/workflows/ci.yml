@@ -1,0 +1,250 @@
+---
+# CI — runs on every pull request to main.
+# Validates commit message, lints all files, runs pytest, runs Hurl API tests,
+# and builds a preview Docker image (with Trivy security scan) when Dockerfile changes.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  security-events: write
+
+jobs:
+  commit-msg:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ✅ Validate semantic PR title
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50  # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            chore
+            docs
+            refactor
+            test
+            ci
+            perf
+            build
+            revert
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: 🐍 Set up Python 3.14.6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: "3.14.6"
+
+      - name: 💾 Cache pre-commit envs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: 📦 Install dependencies
+        run: pip install -r requirements-dev.txt -e .
+
+      - name: 🔍 Run pre-commit hooks
+        run: pre-commit run --all-files -v
+
+      - name: 🔒 Audit MCP dependencies
+        run: pip install pip-audit && pip-audit --requirement mcp/requirements.txt
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: 🐍 Set up Python 3.14.6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: "3.14.6"
+
+      - name: 📦 Install dependencies
+        run: pip install -r requirements-dev.txt -e .
+
+      - name: 🧪 Run pytest suite
+        run: pytest tests/cli/ -v
+
+  mcp-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: 🐍 Set up Python 3.14.6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: "3.14.6"
+
+      - name: 📦 Install MCP dependencies
+        run: pip install -r mcp/requirements.txt pytest
+
+      - name: 🧪 Run MCP tests
+        run: pytest mcp/tests/ -v
+
+  hurl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: 🐍 Set up Python 3.14.6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: "3.14.6"
+
+      - name: 📦 Install dependencies
+        run: pip install -r requirements.txt -e .
+
+      - name: 🌐 Install Hurl 8.0.1
+        uses: gacts/install-hurl@ab6d0234456944b022ef7d1f594845af9561357d  # v1.3.4
+        with:
+          version: "8.0.1"  # https://github.com/Orange-OpenSource/hurl/releases
+
+      - name: 📚 Build MkDocs site (required for /docs redirect test)
+        run: pip install -r requirements-dev.txt -e . && mkdocs build --strict
+
+      - name: 🚀 Start API server
+        run: uvicorn src.api.main:app --port 8080 &
+
+      - name: ⏳ Wait for server to be ready
+        run: |
+          until curl -sf http://localhost:8080/api/v1/quizzes; do
+            sleep 1
+          done
+
+      - name: 🔗 Run Hurl API tests
+        run: hurl --test --file-root . tests/api/*.hurl
+
+  mcp-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      mcp: ${{ steps.filter.outputs.mcp }}
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: 🔍 Detect MCP changes
+        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706  # v4.0.2
+        id: filter
+        with:
+          filters: |
+            mcp:
+              - 'mcp/**'
+
+  mcp-docker-preview:
+    runs-on: ubuntu-latest
+    needs: [mcp-test, mcp-changes]
+    if: needs.mcp-changes.outputs.mcp == 'true'
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+      - name: 🏷️ Set short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: 🐳 Build and push MCP preview
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        with:
+          context: ./mcp
+          push: true
+          tags: ttl.sh/${{ github.repository }}/mcp:6h-${{ github.event.pull_request.number }}-${{ steps.sha.outputs.short }}
+      - name: 🔒 Scan MCP image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: ttl.sh/${{ github.repository }}/mcp:6h-${{ github.event.pull_request.number }}-${{ steps.sha.outputs.short }}
+          format: sarif
+          output: mcp-trivy.sarif
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+      - name: 📤 Upload MCP Trivy SARIF
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a  # v4.36.3
+        with:
+          sarif_file: mcp-trivy.sarif
+
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      dockerfile: ${{ steps.filter.outputs.dockerfile }}
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: 🔍 Detect changed files
+        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706  # v4.0.2
+        id: filter
+        with:
+          filters: |
+            dockerfile:
+              - 'Dockerfile'
+              - 'pyproject.toml'
+
+  docker-preview:
+    runs-on: ubuntu-latest
+    needs: [lint, test, mcp-test, hurl, changes]
+    if: needs.changes.outputs.dockerfile == 'true'
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
+      - name: 🏷️ Set short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: 🏷️ Set preview image tag
+        id: tag
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          SHA="${{ steps.sha.outputs.short }}"
+          REPO="${{ github.repository }}"
+          echo "value=ttl.sh/${REPO}:6h-${PR}-${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: 🐳 Build and push preview image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tag.outputs.value }}
+
+  trivy-scan:
+    runs-on: ubuntu-latest
+    needs: [docker-preview, changes]
+    if: needs.changes.outputs.dockerfile == 'true'
+    steps:
+      - name: 🏷️ Set image reference
+        id: meta
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          REPO="${{ github.repository }}"
+          SHA="${GITHUB_SHA::7}"
+          echo "image=ttl.sh/${REPO}:6h-${PR}-${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: 🔒 Scan image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: ${{ steps.meta.outputs.image }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+
+      - name: 📤 Upload Trivy SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a  # v4.36.3
+        with:
+          sarif_file: trivy.sarif

@@ -1,0 +1,16 @@
+---
+name: quiz-prep
+
+services:
+  quiz:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - quiz_data:/app/data
+    environment:
+      QUIZ_DB: /app/data/quiz.db
+    restart: unless-stopped
+
+volumes:
+  quiz_data:
