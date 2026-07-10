@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/vikas027/quiz-prep/compare/v0.4.0...v0.4.1) (2026-07-10)
+
+
+### Bug Fixes
+
+* **ui:** map choice_explanations to original letter after shuffle ([#12](https://github.com/vikas027/quiz-prep/issues/12)) ([3c679ba](https://github.com/vikas027/quiz-prep/commit/3c679ba983cf65952c100816feaba324501dbd4f))
+
 ## [0.4.0](https://github.com/vikas027/quiz-prep/compare/v0.3.1...v0.4.0) (2026-07-10)
 
 
