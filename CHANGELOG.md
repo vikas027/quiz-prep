@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/vikas027/quiz-prep/compare/v0.3.1...v0.4.0) (2026-07-10)
+
+
+### Features
+
+* **quiz:** star/important questions, scrollable sidebar, and picker UX fixes ([#10](https://github.com/vikas027/quiz-prep/issues/10)) ([01fc567](https://github.com/vikas027/quiz-prep/commit/01fc567c325f12de6339883e522834f0296a9284))
+
 ## [0.3.1](https://github.com/vikas027/quiz-prep/compare/v0.3.0...v0.3.1) (2026-07-09)
 
 
