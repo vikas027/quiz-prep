@@ -343,3 +343,66 @@ HTTP 422
 DELETE http://localhost:8080/api/v1/quizzes/hurl-important
 
 HTTP 200
+
+# ── choice_explanations: stored, returned, and partially updated correctly ──
+POST http://localhost:8080/api/v1/quizzes
+Content-Type: application/json
+{"name": "hurl-expl", "label": "Explanations Test"}
+
+HTTP 201
+
+# Add question with choice_explanations for all 4 choices
+POST http://localhost:8080/api/v1/quizzes/hurl-expl/questions
+Content-Type: application/json
+{
+  "question": "Which colour is the sky?",
+  "choices": ["A. Red", "B. Blue", "C. Green", "D. Yellow"],
+  "answer": "B. Blue",
+  "choice_explanations": {
+    "A": "Red is for sunsets, not the daytime sky.",
+    "B": "Correct — Rayleigh scattering makes the sky appear blue.",
+    "C": "Green skies indicate severe storms.",
+    "D": "Yellow appears near the horizon at dusk."
+  }
+}
+
+HTTP 201
+[Captures]
+expl_qid: jsonpath "$.id"
+[Asserts]
+jsonpath "$.choice_explanations.A" == "Red is for sunsets, not the daytime sky."
+jsonpath "$.choice_explanations.B" == "Correct — Rayleigh scattering makes the sky appear blue."
+jsonpath "$.choice_explanations.C" == "Green skies indicate severe storms."
+jsonpath "$.choice_explanations.D" == "Yellow appears near the horizon at dusk."
+
+# Fetch list — choice_explanations must be persisted
+GET http://localhost:8080/api/v1/quizzes/hurl-expl/questions
+
+HTTP 200
+[Asserts]
+jsonpath "$[0].choice_explanations.A" == "Red is for sunsets, not the daytime sky."
+jsonpath "$[0].choice_explanations.B" == "Correct — Rayleigh scattering makes the sky appear blue."
+
+# Add question without choice_explanations — field must be null
+POST http://localhost:8080/api/v1/quizzes/hurl-expl/questions
+Content-Type: application/json
+{"question": "No explanations?", "choices": ["A. yes", "B. no"], "answer": "A. yes"}
+
+HTTP 201
+[Asserts]
+jsonpath "$.choice_explanations" == null
+
+# Update: add partial choice_explanations to the first question
+PUT http://localhost:8080/api/v1/quizzes/hurl-expl/questions/{{expl_qid}}
+Content-Type: application/json
+{"choice_explanations": {"A": "Updated A.", "B": "Updated B."}}
+
+HTTP 200
+[Asserts]
+jsonpath "$.choice_explanations.A" == "Updated A."
+jsonpath "$.choice_explanations.B" == "Updated B."
+
+# Teardown
+DELETE http://localhost:8080/api/v1/quizzes/hurl-expl
+
+HTTP 200

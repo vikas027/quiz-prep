@@ -1035,10 +1035,11 @@ function renderQ() {
     }
     btn.addEventListener('click', () => pick(c));
     box.appendChild(btn);
-    if (showFeedback && q.choice_explanations?.[letter]) {
+    const origLetter = c.charAt(0);
+    if (showFeedback && q.choice_explanations?.[origLetter]) {
       const ed = document.createElement('div');
       ed.className = 'choice-expl';
-      ed.innerHTML = `<div class="choice-expl-label">Explanation</div>${escapeHtml(q.choice_explanations[letter])}`;
+      ed.innerHTML = `<div class="choice-expl-label">Explanation</div>${escapeHtml(q.choice_explanations[origLetter])}`;
       box.appendChild(ed);
     }
   });
