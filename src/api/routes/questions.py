@@ -4,6 +4,7 @@ from src import db
 from src.api.schemas import (
     BulkDeleteResult,
     BulkEnableResult,
+    BulkUnmarkResult,
     DeleteResult,
     QuestionCreate,
     QuestionOut,
@@ -27,10 +28,10 @@ def list_questions(
     limit: int | None = None,
     show: str = "enabled",
 ) -> list[dict]:
-    if show not in ("enabled", "disabled", "all"):
+    if show not in ("enabled", "disabled", "all", "important"):
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=422, detail="show must be 'enabled', 'disabled', or 'all'")
+        raise HTTPException(status_code=422, detail="show must be 'enabled', 'disabled', 'all', or 'important'")
     s = _get_set_or_404(name)
     return db.list_questions(s["id"], category=category, limit=limit, show=show)
 
@@ -47,6 +48,7 @@ def add_question(name: str, body: QuestionCreate) -> dict:
         body.explanation,
         body.choice_explanations,
         body.disabled,
+        body.important,
     )
     if result is None:
         raise HTTPException(status_code=409, detail="An identical question already exists in this quiz")
@@ -75,6 +77,13 @@ def enable_all_disabled(name: str) -> dict:
     s = _get_set_or_404(name)
     count = db.enable_all_questions(s["id"])
     return {"enabled_count": count}
+
+
+@router.post("/unmark-all-important", response_model=BulkUnmarkResult, status_code=status.HTTP_200_OK)
+def unmark_all_important(name: str) -> dict:
+    s = _get_set_or_404(name)
+    count = db.unmark_all_important(s["id"])
+    return {"unmarked_count": count}
 
 
 @router.delete("", response_model=BulkDeleteResult)

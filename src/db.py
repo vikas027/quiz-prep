@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS questions (
     explanation         TEXT,
     choice_explanations TEXT,
     disabled            INTEGER NOT NULL DEFAULT 0,
+    important           INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_questions_set_question
@@ -72,6 +73,10 @@ def init_db() -> None:
             pass
         try:
             conn.execute("ALTER TABLE questions ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE questions ADD COLUMN important INTEGER NOT NULL DEFAULT 0")
         except sqlite3.OperationalError:
             pass
 
@@ -134,6 +139,8 @@ def list_questions(
         sql += " AND disabled = 0"
     elif show == "disabled":
         sql += " AND disabled = 1"
+    elif show == "important":
+        sql += " AND important = 1"
     sql += " ORDER BY id"
     if limit:
         sql += " LIMIT ?"
@@ -151,12 +158,13 @@ def add_question(
     explanation: str | None = None,
     choice_explanations: dict | None = None,
     disabled: bool = False,
+    important: bool = False,
 ) -> dict | None:
     """Returns None if an identical question already exists in the set."""
     with _conn() as conn:
-        cols = "set_id, question, choices, answer, category, explanation, choice_explanations, disabled"
+        cols = "set_id, question, choices, answer, category, explanation, choice_explanations, disabled, important"
         cur = conn.execute(
-            f"INSERT OR IGNORE INTO questions ({cols}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            f"INSERT OR IGNORE INTO questions ({cols}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 set_id,
                 question,
@@ -166,6 +174,7 @@ def add_question(
                 explanation,
                 json.dumps(choice_explanations) if choice_explanations else None,
                 int(disabled),
+                int(important),
             ),
         )
         if cur.rowcount == 0:
@@ -205,6 +214,12 @@ def enable_all_questions(set_id: int) -> int:
         return cur.rowcount
 
 
+def unmark_all_important(set_id: int) -> int:
+    with _conn() as conn:
+        cur = conn.execute("UPDATE questions SET important = 0 WHERE set_id = ? AND important = 1", (set_id,))
+        return cur.rowcount
+
+
 def delete_all_questions(set_id: int) -> int:
     with _conn() as conn:
         cur = conn.execute("DELETE FROM questions WHERE set_id = ?", (set_id,))
@@ -217,9 +232,9 @@ def import_questions(set_id: int, questions: list[dict]) -> tuple[int, int]:
     with _conn() as conn:
         for q in questions:
             ce = q.get("choice_explanations")
-            cols = "set_id, question, choices, answer, category, explanation, choice_explanations, disabled"
+            cols = "set_id, question, choices, answer, category, explanation, choice_explanations, disabled, important"
             cur = conn.execute(
-                f"INSERT OR IGNORE INTO questions ({cols}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                f"INSERT OR IGNORE INTO questions ({cols}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     set_id,
                     q["question"],
@@ -229,6 +244,7 @@ def import_questions(set_id: int, questions: list[dict]) -> tuple[int, int]:
                     q.get("explanation"),
                     json.dumps(ce) if ce else None,
                     int(bool(q.get("disabled", False))),
+                    int(bool(q.get("important", False))),
                 ),
             )
             imported += cur.rowcount

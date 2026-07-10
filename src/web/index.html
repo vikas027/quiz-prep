@@ -283,15 +283,23 @@ input[type=number]:focus{border-color:var(--volt-border)}
 .q-sidebar{
   width:196px;flex-shrink:0;
   position:sticky;top:60px;
+  max-height:calc(100vh - 72px);
+  display:flex;flex-direction:column;overflow:hidden;
   background:var(--glass);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);
   border:1px solid var(--wire);border-top:1px solid var(--wire-bright);
   border-radius:16px;padding:1.25rem;
 }
 .sidebar-label{
   font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--haze);margin-bottom:.75rem;
+  color:var(--haze);margin-bottom:.75rem;flex-shrink:0;
 }
-.q-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:.3rem;margin-bottom:1rem}
+.q-grid{
+  display:grid;grid-template-columns:repeat(5,1fr);gap:.3rem;margin-bottom:1rem;
+  overflow-y:auto;flex:1;min-height:0;
+}
+.q-grid::-webkit-scrollbar{width:4px}
+.q-grid::-webkit-scrollbar-track{background:transparent}
+.q-grid::-webkit-scrollbar-thumb{background:var(--wire-bright);border-radius:2px}
 .qdot{
   aspect-ratio:1;border-radius:6px;
   border:1px solid var(--wire);background:transparent;
@@ -300,14 +308,15 @@ input[type=number]:focus{border-color:var(--volt-border)}
   display:flex;align-items:center;justify-content:center;
 }
 .qdot:hover{border-color:var(--cloud);color:var(--cloud)}
+.qdot.important-q{border-color:rgba(245,158,11,.55);color:var(--amber)}
 .qdot.current{border-color:var(--volt-border);background:var(--volt-dim);color:#c7d2fe}
 .qdot.answered{background:rgba(99,102,241,.2);border-color:var(--volt-border);color:#c7d2fe}
 .qdot.correct-ans{background:var(--leaf-bg);border-color:var(--leaf-border);color:#6ee7b7}
 .qdot.wrong-ans{background:var(--rose-bg);border-color:var(--rose-border);color:#fda4af}
 
-.sidebar-rule{height:1px;background:var(--wire);margin:.875rem 0}
-.sidebar-stat{font-size:.8rem;color:var(--cloud);font-weight:500;margin-bottom:.25rem}
-.sidebar-sub{font-size:.72rem;color:var(--haze)}
+.sidebar-rule{height:1px;background:var(--wire);margin:.875rem 0;flex-shrink:0}
+.sidebar-stat{font-size:.8rem;color:var(--cloud);font-weight:500;margin-bottom:.25rem;flex-shrink:0}
+.sidebar-sub{font-size:.72rem;color:var(--haze);flex-shrink:0}
 
 .sidebar-timer{
   display:none;margin-top:.875rem;
@@ -369,6 +378,7 @@ input[type=number]:focus{border-color:var(--volt-border)}
 }
 [data-theme=light] .modal-box{background:rgba(255,255,255,.95)}
 @keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .modal-title{font-size:1.1rem;font-weight:700;color:var(--cloud);margin-bottom:.5rem}
 .modal-msg{font-size:.9rem;color:var(--haze);margin-bottom:1.5rem;line-height:1.55}
 .modal-hint{font-size:.75rem;color:var(--haze);margin-top:.875rem;text-align:center;opacity:.7}
@@ -431,6 +441,14 @@ input[type=number]:focus{border-color:var(--volt-border)}
 .live-disable-btn:hover{border-color:var(--rose-border);color:#fda4af;background:var(--rose-bg)}
 .live-disable-btn.is-disabled{border-color:var(--leaf-border);color:#6ee7b7;background:var(--leaf-bg)}
 .live-disable-btn.is-disabled:hover{border-color:var(--rose-border);color:#fda4af;background:var(--rose-bg)}
+.live-star-btn{
+  font-size:.75rem;font-weight:500;padding:.3rem .75rem;
+  border:1px solid var(--wire);border-radius:8px;color:var(--haze);
+  background:transparent;transition:all .15s;margin-top:.75rem;
+}
+.live-star-btn:hover{border-color:rgba(245,158,11,.45);color:var(--amber);background:rgba(245,158,11,.13)}
+.live-star-btn.is-starred{border-color:rgba(245,158,11,.55);color:var(--amber);background:rgba(245,158,11,.13)}
+.live-star-btn.is-starred:hover{border-color:var(--wire-bright);color:var(--haze);background:transparent}
 .empty-review{text-align:center;padding:1.5rem;font-size:.87rem;color:var(--haze)}
 .res-footer{display:flex;gap:.75rem;padding:1.25rem 1.5rem;border-top:1px solid var(--wire)}
 .res-footer .nav-btn{flex:1;justify-content:center}
@@ -507,12 +525,18 @@ input[type=number]:focus{border-color:var(--volt-border)}
 
       <!-- QUIZ PICKER -->
       <div id="quiz-picker" style="display:none">
-        <label class="flabel" for="qs">Quiz</label>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.45rem">
+          <label class="flabel" for="qs" style="margin:0">Quiz</label>
+          <button id="refresh-counts-btn" onclick="refreshCounts()" title="Refresh counts" style="background:none;border:none;color:var(--haze);font-size:1rem;cursor:pointer;padding:0 .2rem;line-height:1;display:inline-block" onmouseover="this.style.color='var(--fg)'" onmouseout="this.style.color='var(--haze)'">↺</button>
+        </div>
         <div class="sel-wrap" style="margin-bottom:.5rem">
           <select id="qs" onchange="onQuizChange()"></select>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem">
-          <button class="del-quiz-btn" id="enable-all-btn" onclick="enableAllDisabled()" style="color:var(--leaf);border-color:var(--leaf-border);background:var(--leaf-bg);display:none">↩ Re-enable all disabled</button>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+            <button class="del-quiz-btn" id="enable-all-btn" onclick="enableAllDisabled()" style="color:var(--leaf);border-color:var(--leaf-border);background:var(--leaf-bg);display:none">↩ Re-enable all disabled</button>
+            <button class="del-quiz-btn" id="unstar-all-btn" onclick="unmarkAllImportant()" style="color:var(--amber);border-color:rgba(245,158,11,.45);background:rgba(245,158,11,.13);display:none">★ Unstar all</button>
+          </div>
           <button class="del-quiz-btn" onclick="deleteSelectedQuiz()">Delete quiz</button>
         </div>
 
@@ -544,6 +568,7 @@ input[type=number]:focus{border-color:var(--volt-border)}
               <div class="ropt"><input type="radio" name="qf" id="qf-all" value="all"><label for="qf-all">All</label></div>
               <div class="ropt"><input type="radio" name="qf" id="qf-enabled" value="enabled" checked><label for="qf-enabled">Enabled only</label></div>
               <div class="ropt"><input type="radio" name="qf" id="qf-disabled" value="disabled"><label for="qf-disabled">Disabled only</label></div>
+              <div class="ropt"><input type="radio" name="qf" id="qf-important" value="important"><label for="qf-important">Important only</label></div>
             </div>
           </div>
           <div class="bcell"><div><div class="bcell-label">Randomize</div><div class="bcell-sub">Question order</div></div><label class="toggle"><input id="tog-shuffle" type="checkbox" checked><span class="ttrack"></span></label></div>
@@ -652,8 +677,8 @@ let timerSecs = 0, timerTotal = 0, timerInterval = null;
 let showOnlyFailed = false, activeQS = [];
 let scoreMode = 'end';
 let allQuestionsCount = 0, catCounts = {};
-let catCountsByFilter = { enabled: {}, disabled: {}, all: {} };
-let totalByFilter = { enabled: 0, disabled: 0, all: 0 };
+let catCountsByFilter = { enabled: {}, disabled: {}, all: {}, important: {} };
+let totalByFilter = { enabled: 0, disabled: 0, all: 0, important: 0 };
 
 /* ── TOAST ── */
 let toastTimer = null;
@@ -737,28 +762,39 @@ async function onQuizChange() {
   await loadCategories();
 }
 
+async function refreshCounts() {
+  const btn = document.getElementById('refresh-counts-btn');
+  btn.style.animation = '';
+  void btn.offsetWidth;
+  btn.style.animation = 'spin 0.6s linear';
+  btn.disabled = true;
+  try { await loadCategories(); } finally { btn.disabled = false; }
+}
 async function loadCategories() {
   if (!activeQuizName) return;
   const catSel = document.getElementById('qcat-sel');
   catSel.innerHTML = '<option value="">All categories</option>';
   try {
     const questions = await apiFetch(`/api/v1/quizzes/${encodeURIComponent(activeQuizName)}/questions?show=all`);
-    catCountsByFilter = { enabled: {}, disabled: {}, all: {} };
-    totalByFilter = { enabled: 0, disabled: 0, all: questions.length };
+    catCountsByFilter = { enabled: {}, disabled: {}, all: {}, important: {} };
+    totalByFilter = { enabled: 0, disabled: 0, all: questions.length, important: 0 };
     const cats = [...new Set(questions.map(q => q.category).filter(Boolean))].sort();
     cats.forEach(c => {
       const all = questions.filter(q => q.category === c);
       const ena = all.filter(q => !q.disabled);
       const dis = all.filter(q => q.disabled);
+      const imp = all.filter(q => q.important);
       catCountsByFilter.all[c] = all.length;
       catCountsByFilter.enabled[c] = ena.length;
       catCountsByFilter.disabled[c] = dis.length;
+      catCountsByFilter.important[c] = imp.length;
       const o = document.createElement('option');
       o.value = c; o.textContent = c;
       catSel.appendChild(o);
     });
     totalByFilter.enabled = questions.filter(q => !q.disabled).length;
     totalByFilter.disabled = questions.filter(q => q.disabled).length;
+    totalByFilter.important = questions.filter(q => q.important).length;
     allQuestionsCount = questions.length;
     catCounts = catCountsByFilter.all;
     catSel.onchange = updateCategoryCount;
@@ -766,6 +802,8 @@ async function loadCategories() {
     updateCategoryCount();
     const enableAllBtn = document.getElementById('enable-all-btn');
     if (enableAllBtn) enableAllBtn.style.display = totalByFilter.disabled > 0 ? '' : 'none';
+    const unstarAllBtn = document.getElementById('unstar-all-btn');
+    if (unstarAllBtn) unstarAllBtn.style.display = totalByFilter.important > 0 ? '' : 'none';
     const timerIn = document.getElementById('timer-input');
     if (parseInt(timerIn.value) === 0) timerIn.value = totalByFilter.enabled;
   } catch (err) {
@@ -942,6 +980,7 @@ function updateSidebar() {
   const remaining = activeQS.length - answered;
   dots.forEach((d, i) => {
     d.className = 'qdot';
+    if (activeQS[i]?.important) d.classList.add('important-q');
     if (i === cq) d.classList.add('current');
     else if (scoreMode === 'live' && answers[i] !== undefined) {
       d.classList.add(answers[i] === activeQS[i].answer ? 'correct-ans' : 'wrong-ans');
@@ -949,6 +988,7 @@ function updateSidebar() {
   });
   document.getElementById('sidebar-stat').textContent = `${answered} / ${activeQS.length} answered`;
   document.getElementById('sidebar-sub').textContent = `${remaining} remaining`;
+  dots[cq]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 /* ── RENDER QUESTION ── */
@@ -1006,14 +1046,18 @@ function renderQ() {
     expl.innerHTML = escapeHtml(q.explanation);
     expl.classList.add('show');
   }
-  if (q.disabled || showFeedback) {
-    const dbtn = document.createElement('button');
-    const isDisabled = q.disabled;
-    dbtn.className = 'live-disable-btn' + (isDisabled ? ' is-disabled' : '');
-    dbtn.textContent = isDisabled ? '↩ Re-enable this question' : '⊘ Never show again';
-    dbtn.onclick = () => toggleDisabled(cq, dbtn);
-    document.getElementById('qdisable-wrap').appendChild(dbtn);
-  }
+  const wrap = document.getElementById('qdisable-wrap');
+  const sbttn = document.createElement('button');
+  sbttn.className = 'live-star-btn' + (q.important ? ' is-starred' : '');
+  sbttn.textContent = q.important ? '★ Unstar this question' : '☆ Star this question';
+  sbttn.onclick = () => toggleImportant(cq, sbttn);
+  wrap.appendChild(sbttn);
+  const dbtn = document.createElement('button');
+  const isDisabled = q.disabled;
+  dbtn.className = 'live-disable-btn' + (isDisabled ? ' is-disabled' : '');
+  dbtn.textContent = isDisabled ? '↩ Re-enable this question' : '⊘ Never show again';
+  dbtn.onclick = () => toggleDisabled(cq, dbtn);
+  wrap.appendChild(dbtn);
   document.getElementById('btn-prev').disabled = cq === 0;
   document.getElementById('btn-next').textContent = cq === total - 1 ? 'Finish ✓' : 'Next →';
   const card = document.getElementById('qcard');
@@ -1035,6 +1079,38 @@ async function enableAllDisabled() {
     const r = await apiFetch(`/api/v1/quizzes/${encodeURIComponent(activeQuizName)}/questions/enable-all-disabled`, { method: 'POST' });
     showToast(`↩ Re-enabled ${r.enabled_count} question(s)`, 'success');
     await loadCategories();
+  } catch (err) {
+    showToast('Failed: ' + err.message, 'error');
+  }
+}
+
+async function unmarkAllImportant() {
+  if (!activeQuizName) return;
+  try {
+    const r = await apiFetch(`/api/v1/quizzes/${encodeURIComponent(activeQuizName)}/questions/unmark-all-important`, { method: 'POST' });
+    showToast(`★ Unstarred ${r.unmarked_count} question(s)`, 'success');
+    await loadCategories();
+  } catch (err) {
+    showToast('Failed: ' + err.message, 'error');
+  }
+}
+
+async function toggleImportant(qi, btn) {
+  const q = activeQS[qi];
+  const newVal = !q.important;
+  try {
+    await apiFetch(`/api/v1/quizzes/${encodeURIComponent(activeQuizName)}/questions/${q.id}`, {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({important: newVal}),
+    });
+    q.important = newVal;
+    if (btn) {
+      btn.textContent = newVal ? '★ Unstar this question' : '☆ Star this question';
+      btn.classList.toggle('is-starred', newVal);
+    }
+    updateSidebar();
+    loadCategories();
+    showToast(newVal ? '★ Question starred' : 'Question unstarred', '');
   } catch (err) {
     showToast('Failed: ' + err.message, 'error');
   }

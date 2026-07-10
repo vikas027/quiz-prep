@@ -259,3 +259,87 @@ jsonpath "$" count == 0
 DELETE http://localhost:8080/api/v1/quizzes/hurl-persist
 
 HTTP 200
+
+# ── important flag: filtering, toggle, and bulk unmark ──
+POST http://localhost:8080/api/v1/quizzes
+Content-Type: application/json
+{"name": "hurl-important", "label": "Important Test"}
+
+HTTP 201
+
+# Add a normal question
+POST http://localhost:8080/api/v1/quizzes/hurl-important/questions
+Content-Type: application/json
+{"question": "Normal Q?", "choices": ["A. yes", "B. no"], "answer": "A. yes"}
+
+HTTP 201
+[Captures]
+qid_normal: jsonpath "$.id"
+[Asserts]
+jsonpath "$.important" == false
+
+# Add an important question
+POST http://localhost:8080/api/v1/quizzes/hurl-important/questions
+Content-Type: application/json
+{"question": "Important Q?", "choices": ["A. yes", "B. no"], "answer": "B. no", "important": true}
+
+HTTP 201
+[Captures]
+qid_important: jsonpath "$.id"
+[Asserts]
+jsonpath "$.important" == true
+
+# show=important: only the important question
+GET http://localhost:8080/api/v1/quizzes/hurl-important/questions?show=important
+
+HTTP 200
+[Asserts]
+jsonpath "$" count == 1
+jsonpath "$[0].important" == true
+
+# Default (show=enabled): both appear (important does not affect enabled filter)
+GET http://localhost:8080/api/v1/quizzes/hurl-important/questions
+
+HTTP 200
+[Asserts]
+jsonpath "$" count == 2
+
+# Toggle: star the normal question
+PUT http://localhost:8080/api/v1/quizzes/hurl-important/questions/{{qid_normal}}
+Content-Type: application/json
+{"important": true}
+
+HTTP 200
+[Asserts]
+jsonpath "$.important" == true
+
+# Now both are important
+GET http://localhost:8080/api/v1/quizzes/hurl-important/questions?show=important
+
+HTTP 200
+[Asserts]
+jsonpath "$" count == 2
+
+# Bulk unmark
+POST http://localhost:8080/api/v1/quizzes/hurl-important/questions/unmark-all-important
+
+HTTP 200
+[Asserts]
+jsonpath "$.unmarked_count" == 2
+
+# None important after bulk unmark
+GET http://localhost:8080/api/v1/quizzes/hurl-important/questions?show=important
+
+HTTP 200
+[Asserts]
+jsonpath "$" count == 0
+
+# Invalid show value still 422
+GET http://localhost:8080/api/v1/quizzes/hurl-important/questions?show=invalid
+
+HTTP 422
+
+# Teardown
+DELETE http://localhost:8080/api/v1/quizzes/hurl-important
+
+HTTP 200
