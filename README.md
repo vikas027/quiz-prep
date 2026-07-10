@@ -24,6 +24,7 @@ It ships as a single container with a dark-mode web UI, a REST API with Swagger,
 
 - **Web UI** — dark/light glassmorphism design; quiz picker, category filter, question count, timer; live feedback with per-choice explanations or score-at-end mode; keyboard navigation throughout
 - **Disable questions** — mark questions you know cold so they are skipped by default; re-enable individually or all at once; filter by enabled / disabled / all when starting a quiz
+- **Star questions** — mark questions as important to revisit; filter by important only when starting a quiz; unstar all at once from the settings screen
 - **Import / export** — upload YAML from the browser; export any quiz back to YAML; duplicate detection keeps your banks clean
 - **Score history** — tracks last N results per quiz; retake failed questions only
 - **REST API** — full CRUD at `/api/v1/`; Swagger UI at `/swagger`; Hurl integration tests
@@ -94,6 +95,7 @@ questions:
       unallocated CPU. Solutions include adding nodes, reducing CPU requests,
       or freeing capacity.
     disabled: true          # skip this question by default (you know it cold)
+    important: true         # star this question to revisit it
     choice_explanations:    # per-choice explanations shown in live feedback
       A: Image pull failures show as ImagePullBackOff, not Insufficient cpu.
       B: Correct — this is a scheduling failure, not a runtime failure.

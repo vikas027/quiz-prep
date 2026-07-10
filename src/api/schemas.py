@@ -22,6 +22,7 @@ class QuestionCreate(BaseModel):
     explanation: str | None = None
     choice_explanations: dict[str, str] | None = None
     disabled: bool = False
+    important: bool = False
 
     @field_validator("answer")
     @classmethod
@@ -40,6 +41,7 @@ class QuestionUpdate(BaseModel):
     explanation: str | None = None
     choice_explanations: dict[str, str] | None = None
     disabled: bool | None = None
+    important: bool | None = None
 
 
 class QuestionOut(BaseModel):
@@ -52,6 +54,7 @@ class QuestionOut(BaseModel):
     explanation: str | None
     choice_explanations: dict[str, str] | None
     disabled: bool
+    important: bool
     created_at: str
 
 
@@ -91,3 +94,7 @@ class BulkDeleteResult(BaseModel):
 
 class BulkEnableResult(BaseModel):
     enabled_count: int
+
+
+class BulkUnmarkResult(BaseModel):
+    unmarked_count: int
