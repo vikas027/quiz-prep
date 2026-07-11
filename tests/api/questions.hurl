@@ -344,6 +344,78 @@ DELETE http://localhost:8080/api/v1/quizzes/hurl-important
 
 HTTP 200
 
+# ── offset/range: slice questions by position ──
+POST http://localhost:8080/api/v1/quizzes
+Content-Type: application/json
+{"name": "hurl-offset", "label": "Offset Test"}
+
+HTTP 201
+
+# Seed 5 questions in insertion order
+POST http://localhost:8080/api/v1/quizzes/hurl-offset/questions
+Content-Type: application/json
+{"question": "Q1?", "choices": ["A. a", "B. b"], "answer": "A. a"}
+HTTP 201
+
+POST http://localhost:8080/api/v1/quizzes/hurl-offset/questions
+Content-Type: application/json
+{"question": "Q2?", "choices": ["A. a", "B. b"], "answer": "A. a"}
+HTTP 201
+
+POST http://localhost:8080/api/v1/quizzes/hurl-offset/questions
+Content-Type: application/json
+{"question": "Q3?", "choices": ["A. a", "B. b"], "answer": "A. a"}
+HTTP 201
+
+POST http://localhost:8080/api/v1/quizzes/hurl-offset/questions
+Content-Type: application/json
+{"question": "Q4?", "choices": ["A. a", "B. b"], "answer": "A. a"}
+HTTP 201
+
+POST http://localhost:8080/api/v1/quizzes/hurl-offset/questions
+Content-Type: application/json
+{"question": "Q5?", "choices": ["A. a", "B. b"], "answer": "A. a"}
+HTTP 201
+
+# Range 1-3: first 3 questions (offset=0, limit=3)
+GET http://localhost:8080/api/v1/quizzes/hurl-offset/questions?limit=3&offset=0&show=all
+
+HTTP 200
+[Asserts]
+jsonpath "$" count == 3
+jsonpath "$[0].question" == "Q1?"
+jsonpath "$[2].question" == "Q3?"
+
+# Range 2-4: middle slice (offset=1, limit=3)
+GET http://localhost:8080/api/v1/quizzes/hurl-offset/questions?limit=3&offset=1&show=all
+
+HTTP 200
+[Asserts]
+jsonpath "$" count == 3
+jsonpath "$[0].question" == "Q2?"
+jsonpath "$[2].question" == "Q4?"
+
+# Range 4-5: last 2 (offset=3, limit=2)
+GET http://localhost:8080/api/v1/quizzes/hurl-offset/questions?limit=2&offset=3&show=all
+
+HTTP 200
+[Asserts]
+jsonpath "$" count == 2
+jsonpath "$[0].question" == "Q4?"
+jsonpath "$[1].question" == "Q5?"
+
+# Offset past end → empty
+GET http://localhost:8080/api/v1/quizzes/hurl-offset/questions?limit=5&offset=10&show=all
+
+HTTP 200
+[Asserts]
+jsonpath "$" count == 0
+
+# Teardown
+DELETE http://localhost:8080/api/v1/quizzes/hurl-offset
+
+HTTP 200
+
 # ── choice_explanations: stored, returned, and partially updated correctly ──
 POST http://localhost:8080/api/v1/quizzes
 Content-Type: application/json

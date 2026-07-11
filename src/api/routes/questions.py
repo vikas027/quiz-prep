@@ -26,6 +26,7 @@ def list_questions(
     name: str,
     category: str | None = None,
     limit: int | None = None,
+    offset: int = 0,
     show: str = "enabled",
 ) -> list[dict]:
     if show not in ("enabled", "disabled", "all", "important"):
@@ -33,7 +34,7 @@ def list_questions(
 
         raise HTTPException(status_code=422, detail="show must be 'enabled', 'disabled', 'all', or 'important'")
     s = _get_set_or_404(name)
-    return db.list_questions(s["id"], category=category, limit=limit, show=show)
+    return db.list_questions(s["id"], category=category, limit=limit, offset=offset, show=show)
 
 
 @router.post("", response_model=QuestionOut, status_code=status.HTTP_201_CREATED)

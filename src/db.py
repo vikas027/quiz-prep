@@ -128,6 +128,7 @@ def list_questions(
     set_id: int,
     category: str | None = None,
     limit: int | None = None,
+    offset: int = 0,
     show: str = "enabled",
 ) -> list[dict]:
     sql = "SELECT * FROM questions WHERE set_id = ?"
@@ -145,6 +146,9 @@ def list_questions(
     if limit:
         sql += " LIMIT ?"
         params.append(limit)
+        if offset:
+            sql += " OFFSET ?"
+            params.append(offset)
     with _conn() as conn:
         return [_deserialise(r) for r in conn.execute(sql, params).fetchall()]
 
