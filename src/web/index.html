@@ -119,6 +119,10 @@ input[type=number]:focus{border-color:var(--volt-border)}
 .bento{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.625rem;margin-bottom:1.1rem}
 .bento-full{grid-column:1/-1}
 .bento-two{grid-column:span 2}
+#range-from,#range-to{-webkit-appearance:none;-moz-appearance:textfield;width:80px;transition:border-color .15s,box-shadow .15s}
+#range-from::-webkit-inner-spin-button,#range-from::-webkit-outer-spin-button,
+#range-to::-webkit-inner-spin-button,#range-to::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.range-err{border-color:var(--rose-border)!important;box-shadow:0 0 0 2px rgba(244,63,94,.18)}
 .bcell{
   background:var(--glass);border:1px solid var(--wire);border-radius:12px;
   padding:.8rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem;transition:background .15s;
@@ -310,8 +314,8 @@ input[type=number]:focus{border-color:var(--volt-border)}
 }
 .qdot:hover{border-color:var(--cloud);color:var(--cloud)}
 .qdot.important-q{border-color:rgba(245,158,11,.55);color:var(--amber)}
-.qdot.disabled-q{border-color:var(--rose-border);color:#fda4af}
-.q-card.disabled-card{border-color:var(--rose-border)}
+.qdot.disabled-q{border-color:rgba(100,116,139,.5);color:#64748b;text-decoration:line-through}
+.q-card.disabled-card{border-color:rgba(100,116,139,.5)}
 .qdot.current{border-color:var(--volt-border);background:var(--volt-dim);color:#c7d2fe}
 .qdot.answered{background:rgba(99,102,241,.2);border-color:var(--volt-border);color:#c7d2fe}
 .qdot.correct-ans{background:var(--leaf-bg);border-color:var(--leaf-border);color:#6ee7b7}
@@ -554,20 +558,23 @@ input[type=number]:focus{border-color:var(--volt-border)}
             <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.82rem;color:var(--fg)">
               <input type="radio" name="qmode" id="qmode-count" value="count" checked onchange="onQModeChange()" style="accent-color:var(--accent);margin:0;flex-shrink:0">
               Count
-              <input id="count-input" type="number" value="20" min="1" max="999" style="width:60px;margin-left:.15rem"
+              <input id="count-input" type="number" value="20" min="1" max="999" style="width:80px;margin-left:.15rem"
                 oninput="document.getElementById('timer-input').value=this.value">
             </label>
             <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.82rem;color:var(--fg)">
               <input type="radio" name="qmode" id="qmode-range" value="range" onchange="onQModeChange()" style="accent-color:var(--accent);margin:0;flex-shrink:0">
               Range
-              <input id="range-from" type="number" value="1" min="1" max="999" disabled style="width:50px;margin-left:.15rem;opacity:.4">
+              <input id="range-from" type="number" value="1" min="1" max="999" disabled style="margin-left:.15rem;opacity:.4"
+                oninput="validateRange()">
               <span style="color:var(--haze);font-size:.78rem;flex-shrink:0">to</span>
-              <input id="range-to" type="number" value="20" min="1" max="999" disabled style="width:50px;opacity:.4">
+              <input id="range-to" type="number" value="5" min="1" max="999" disabled style="opacity:.4"
+                oninput="validateRange()">
             </label>
+            <div id="range-err-msg" style="display:none;font-size:.75rem;color:#fda4af;margin-top:.1rem"></div>
           </div>
-          <div class="bcell">
-            <div><div class="bcell-label">Timer</div><div class="bcell-sub">Minutes (0 = off)</div></div>
-            <input id="timer-input" type="number" value="0" min="0" max="180" style="width:66px">
+          <div class="bcell" style="min-width:0">
+            <div style="min-width:0"><div class="bcell-label">Timer</div><div class="bcell-sub">Minutes<br>(0 = off)</div></div>
+            <input id="timer-input" type="number" value="0" min="0" max="999" style="width:80px;flex-shrink:0">
           </div>
           <div class="bcell bento-full" style="flex-direction:column;align-items:stretch;gap:.6rem">
             <div class="flabel" style="margin:0">Score mode</div>
@@ -833,15 +840,41 @@ function onQModeChange() {
   countIn.disabled = isRange; countIn.style.opacity = isRange ? '.4' : '1';
   fromIn.disabled = !isRange; fromIn.style.opacity = isRange ? '1' : '.4';
   toIn.disabled = !isRange;   toIn.style.opacity = isRange ? '1' : '.4';
-  const shuffleTog = document.getElementById('tog-shuffle');
-  shuffleTog.disabled = isRange;
-  shuffleTog.closest('.bcell').style.opacity = isRange ? '.45' : '1';
   document.querySelectorAll('input[name="qf"]').forEach(r => {
     r.disabled = isRange;
     r.closest('.ropt').style.opacity = (isRange && r.value !== 'all') ? '.45' : '1';
   });
-  if (isRange) document.getElementById('qf-all').checked = true;
+  if (isRange) {
+    document.getElementById('qf-all').checked = true;
+    validateRange();
+  } else {
+    fromIn.classList.remove('range-err');
+    toIn.classList.remove('range-err');
+    document.getElementById('range-err-msg').style.display = 'none';
+    document.getElementById('start-btn').disabled = false;
+  }
   updateCategoryCount();
+}
+
+function validateRange() {
+  const fromIn = document.getElementById('range-from');
+  const toIn = document.getElementById('range-to');
+  const from = parseInt(fromIn.value) || 0;
+  const to = parseInt(toIn.value) || 0;
+  const totalAll = totalByFilter['all'] || 0;
+  const fromErr = from < 1 || from > to;
+  const toErr = totalAll > 0 && to > totalAll;
+  fromIn.classList.toggle('range-err', fromErr);
+  toIn.classList.toggle('range-err', toErr);
+  const valid = !fromErr && !toErr;
+  document.getElementById('timer-input').value = valid ? Math.max(0, to - from + 1) : 0;
+  const msg = document.getElementById('range-err-msg');
+  if (from < 1) { msg.textContent = 'Start must be at least 1'; msg.style.display = 'block'; }
+  else if (fromErr) { msg.textContent = 'Start must be less than end'; msg.style.display = 'block'; }
+  else if (toErr) { msg.textContent = `End cannot exceed ${totalAll} questions`; msg.style.display = 'block'; }
+  else { msg.style.display = 'none'; }
+  document.getElementById('start-btn').disabled = !valid;
+  return valid;
 }
 
 function updateCategoryCount() {
@@ -857,10 +890,12 @@ function updateCategoryCount() {
   document.getElementById('timer-input').value = available;
   const totalAll = totalByFilter['all'] || 0;
   const toIn = document.getElementById('range-to');
-  toIn.max = totalAll;
-  if (!toIn.value || parseInt(toIn.value) > totalAll) toIn.value = totalAll;
   const fromIn = document.getElementById('range-from');
-  fromIn.max = totalAll;
+  if (totalAll > 0) {
+    toIn.max = totalAll;
+    if (parseInt(toIn.value) > totalAll) toIn.value = totalAll;
+    fromIn.max = totalAll;
+  }
 }
 
 /* ── DELETE QUIZ ── */
@@ -959,6 +994,7 @@ async function startQuiz() {
 
   let url;
   if (isRange) {
+    if (!validateRange()) { showToast('Fix the range before starting', 'error'); return; }
     const from = Math.max(1, parseInt(document.getElementById('range-from').value) || 1);
     const to = Math.max(from, parseInt(document.getElementById('range-to').value) || from);
     url = `/api/v1/quizzes/${encodeURIComponent(name)}/questions?limit=${to - from + 1}&offset=${from - 1}&show=all`;
@@ -1394,6 +1430,8 @@ document.addEventListener('keydown', e => {
 /* ── INIT ── */
 const savedTheme = localStorage.getItem('quiz-theme') || 'dark';
 applyTheme(savedTheme);
+document.getElementById('qmode-count').checked = true;
+onQModeChange();
 loadQuizzes();
 </script>
 </body>

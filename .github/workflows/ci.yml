@@ -7,6 +7,14 @@ name: CI
 on:
   pull_request:
     branches: [main]
+    paths:
+      - "src/**"
+      - "mcp/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "Dockerfile"
+      - "requirements*.txt"
+      - ".github/workflows/ci.yml"
   workflow_dispatch:
 
 permissions:
