@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/vikas027/quiz-prep/compare/v0.4.1...v0.5.0) (2026-07-11)
+
+
+### Features
+
+* question range picker, disabled color, and UX polish ([#14](https://github.com/vikas027/quiz-prep/issues/14)) ([a7688ad](https://github.com/vikas027/quiz-prep/commit/a7688ad51bea08b716311039e8d5184c2bf8dce4))
+
 ## [0.4.1](https://github.com/vikas027/quiz-prep/compare/v0.4.0...v0.4.1) (2026-07-10)
 
 
