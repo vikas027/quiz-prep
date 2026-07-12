@@ -8,7 +8,7 @@ pytest-asyncio==1.4.0
 
 # Linting & type-checking
 mypy==2.2.0
-ruff==0.15.20
+ruff==0.15.21
 
 # Git hooks
 pre-commit==4.6.0
